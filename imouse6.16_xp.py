@@ -60,7 +60,7 @@ T_APP_LAUNCH = 6.0; T_PAGE_LOAD = 3.5; T_CLICK = 1.5; T_SWIPE = 2.0
 TIKTOK_SCHEME = "snssdk1233://"
 
 # ── 自动更新配置 ──
-LOCAL_VERSION = "2.0.4"
+LOCAL_VERSION = "2.0.5"
 UPDATE_CHANNEL = "xp"  # "pro" 或 "xp"
 UPDATE_URLS = [
     "https://cdn.jsdelivr.net/gh/qiguaizhiru/imouse-automation@main",
@@ -121,14 +121,13 @@ class _IMouseXPClient:
         return rd or None
     def _conv_rect(self, rect, is_xywh=False):
         """将rect转为XP格式 [lx,ty,rx,by]。
-        - 如果是4角点格式 [[x1,y1],[x2,y2],[x3,y3],[x4,y4]] → 提取 min/max
-        - 如果 is_xywh=True 且是 [x,y,w,h] → 转为 [x,y,x+w,y+h]
-        - 否则直接返回（假定已是 [lx,ty,rx,by]）
+        - 4角点 [[x1,y1],[x2,y2],[x3,y3],[x4,y4]] → min/max包围盒
+        - is_xywh=True 且 [x,y,w,h] → [x,y,x+w,y+h]
+        - 其他原样返回
         """
         if rect is None: return None
         try:
             if len(rect) == 4 and all(isinstance(p, (list, tuple)) and len(p) == 2 for p in rect):
-                # 4角点格式
                 xs = [p[0] for p in rect]; ys = [p[1] for p in rect]
                 return [min(xs), min(ys), max(xs), max(ys)]
             if is_xywh and len(rect) == 4:
@@ -148,9 +147,8 @@ class _IMouseXPClient:
                 if len(centre)>=2: return (centre[0],centre[1],sim)
         return None
     def ocr(self, did, rect=None):
-        """OCR文字识别 - XP返回data.list, rect自动从[x,y,w,h]转换"""
+        """OCR文字识别 - XP返回gdata.list"""
         data = {"id":did}
-        # OCR的rect在Pro代码中用的是[x,y,w,h]格式
         r2 = self._conv_rect(rect, is_xywh=True)
         if r2: data["rect"] = r2
         r = self._post("/pic/ocr", data, quiet=True)
@@ -817,7 +815,7 @@ class MyApp(QtWidgets.QMainWindow):
         self.__ui.button_adcode_by_group.clicked.connect(lambda: self._button_click('adcode_by_group'))
         self.__ui.button_gen_fail_report.clicked.connect(self._gen_fail_report)
         self.__ui.button_check_update.clicked.connect(self._check_update)
-        self.__ui.label_version.setText(f"本地版本: {LOCAL_VERSION}")
+        self.__ui.label_version.setText(f"v{LOCAL_VERSION}")
         self.__ui.button_fetch_video_selected.clicked.connect(lambda: self._button_click('fetch_video_selected'))
         self.__ui.button_adcode_selected_name.clicked.connect(lambda: self._button_click('adcode_selected_name'))
         self.__ui.button_adcode_selected_devname.clicked.connect(lambda: self._button_click('adcode_selected_devname'))

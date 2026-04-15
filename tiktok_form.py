@@ -51,11 +51,20 @@ class Ui_MainWindow(object):
 
         # -- Title bar --
         title_bar = QtWidgets.QHBoxLayout()
-        self.label_title = QtWidgets.QLabel("iMouse Pro \u81ea\u52a8\u5316\u5de5\u5177 V2.0")
+        self.label_title = QtWidgets.QLabel("iMouse Pro 自动化工具 V2.0")
         self.label_title.setStyleSheet("font-size: 18px; font-weight: bold; color: #1565C0; padding: 4px;")
         title_bar.addWidget(self.label_title)
+        self.label_version = QtWidgets.QLabel("v?")
+        self.label_version.setStyleSheet("color: #666; font-size: 12px; padding: 0 6px;")
+        title_bar.addWidget(self.label_version)
         title_bar.addStretch()
-        self.button_reconnect = QtWidgets.QPushButton("\u91cd\u65b0\u8fde\u63a5")
+        self.button_check_update = QtWidgets.QPushButton("🔄 检查更新")
+        self.button_check_update.setObjectName("button_check_update")
+        self.button_check_update.setStyleSheet(
+            "QPushButton { background-color: #2E7D32; color: white; font-weight: bold; "
+            "padding: 6px 14px; border-radius: 3px; border: none; }")
+        title_bar.addWidget(self.button_check_update)
+        self.button_reconnect = QtWidgets.QPushButton("重新连接")
         self.button_reconnect.setObjectName("button_reconnect")
         self.button_reconnect.setStyleSheet(
             "QPushButton { background-color: #1976D2; color: white; font-weight: bold; "
@@ -393,20 +402,6 @@ class Ui_MainWindow(object):
         tab3_layout = QtWidgets.QVBoxLayout(self.tab_tools)
         tab3_layout.setContentsMargins(12, 12, 12, 12)
         tab3_layout.setSpacing(12)
-
-        # 检查更新按钮
-        update_row = QtWidgets.QHBoxLayout()
-        self.button_check_update = QtWidgets.QPushButton("🔄 检查更新")
-        self.button_check_update.setObjectName("button_check_update")
-        self.button_check_update.setStyleSheet(
-            "QPushButton { background-color: #2E7D32; color: white; font-weight: bold; "
-            "font-size: 13px; padding: 8px 16px; border: none; border-radius: 4px; }")
-        update_row.addWidget(self.button_check_update)
-        self.label_version = QtWidgets.QLabel("本地版本: -")
-        self.label_version.setStyleSheet("color: #666; padding: 0 10px;")
-        update_row.addWidget(self.label_version)
-        update_row.addStretch()
-        tab3_layout.addLayout(update_row)
 
         # 图片上传（图文分组）
         transfer_group = QtWidgets.QGroupBox("图片上传（图文分组）")
