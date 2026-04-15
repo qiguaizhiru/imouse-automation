@@ -1,10 +1,10 @@
 {
   "pro": {
-    "version": "2.0.5",
-    "timestamp": "2026-04-15 17:23:20",
-    "changelog": "检查更新按钮移到顶部标题栏",
+    "version": "2.0.6",
+    "timestamp": "2026-04-15 17:32:06",
+    "changelog": "修复XP版im_connect崩溃问题",
     "files": {
-      "imouse6.16.py": "3be3e76e518d99a45c4e14856d7a31e52c5952ffcbba9cbff3fd4bf0d8ddabe3",
+      "imouse6.16.py": "cd1f9c02e0f7f4c930be2ad99f464172d81e261b9a7f32fb43f774453faaf6e8",
       "tiktok_form.py": "8d0ef290ba4b7430e7986ecca80108a3632c30ef514a9d2e8d3d37b2917e41eb",
       "imouse_api.py": "39d6266e9ed50a806dc91af2ef219da88a85c2c099373cf90643aca2b87738c5",
       "icon/+black.bmp": "f405a1382acf291eba0fb40b297bfa67d77c3002aa736a9ac7ff16858d1de1d3",
@@ -24,11 +24,11 @@
     }
   },
   "xp": {
-    "version": "2.0.5",
-    "timestamp": "2026-04-15 17:23:20",
-    "changelog": "检查更新按钮移到顶部标题栏",
+    "version": "2.0.6",
+    "timestamp": "2026-04-15 17:32:06",
+    "changelog": "修复XP版im_connect崩溃问题",
     "files": {
-      "imouse6.16_xp.py": "cfb3e4e2a758b0ad5c75df28fba867f9f977856c9f5d0e1fdc3037d26ae6a51c",
+      "imouse6.16_xp.py": "ecaedff174e18dc7acc8612b06bf116f20e64aebd67c4d5b46644ef0b1edb92f",
       "tiktok_form.py": "8d0ef290ba4b7430e7986ecca80108a3632c30ef514a9d2e8d3d37b2917e41eb",
       "imouse_api_xp.py": "91e583da502ca77b24e835e533d7fd734ebec14669f3c60011d75c0a549691b9",
       "icon/+black.bmp": "f405a1382acf291eba0fb40b297bfa67d77c3002aa736a9ac7ff16858d1de1d3",

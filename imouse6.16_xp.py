@@ -60,7 +60,7 @@ T_APP_LAUNCH = 6.0; T_PAGE_LOAD = 3.5; T_CLICK = 1.5; T_SWIPE = 2.0
 TIKTOK_SCHEME = "snssdk1233://"
 
 # ── 自动更新配置 ──
-LOCAL_VERSION = "2.0.5"
+LOCAL_VERSION = "2.0.6"
 UPDATE_CHANNEL = "xp"  # "pro" 或 "xp"
 UPDATE_URLS = [
     "https://cdn.jsdelivr.net/gh/qiguaizhiru/imouse-automation@main",
@@ -1002,10 +1002,10 @@ class MyApp(QtWidgets.QMainWindow):
             if fun == 'get_device_list':
                 self.api.get_device_list(sync=False)
                 return
-            elif fun in ('get_devicemodel_list', '/config/devicemodel/get'):
+            elif fun == 'get_devicemodel_list':
                 self.api.get_devicemodel_list(sync=False)
                 return
-            elif fun in ('get_usb_list', '/config/usb/get'):
+            elif fun == 'get_usb_list':
                 self.api.get_usb_list(sync=False)
                 return
 
@@ -1060,7 +1060,7 @@ class MyApp(QtWidgets.QMainWindow):
         if deviceid == '':
             return
 
-        if fun in ('get_device_screenshot', '/pic/screenshot'):
+        if fun == 'get_device_screenshot':
             gzip_val = self.__ui.checkBox_gzip.checkState().value
             sync = self.__ui.checkBox_sync.checkState().value
             binary = self.__ui.checkBox_binary.checkState().value
@@ -1094,7 +1094,7 @@ class MyApp(QtWidgets.QMainWindow):
             self.api.change_dev_usb_id(deviceid=deviceid, vid=vid, pid=pid, sync=False)
             return
 
-        elif fun in ('del_dev', '/device/del'):
+        elif fun == 'del_dev':
             self.api.del_dev(deviceid=deviceid, sync=False)
             return
 
@@ -1594,12 +1594,37 @@ class MyApp(QtWidgets.QMainWindow):
             self.api.get_usb_list(sync=False)
         elif fun == 'connect_disconnect':
             self._debug("连接断开")
-        elif fun in ('dev_connect', 'im_connect'):
-            self._debug("有设备连接 {}".format(data.get('data', {}).get('deviceid', '')))
-            self._add_device_list({data['data']['deviceid']: data['data']}, True)
+        elif fun == 'im_connect':
+            self._debug("内核已连接")
+            self.api.get_device_list(sync=False)
+            self.api.get_devicemodel_list(sync=False)
+            self.api.get_usb_list(sync=False)
+        elif fun == 'user_info':
+            pass
+        elif fun == 'dev_connect':
+            _dev_data = data.get('data', {})
+            _dev_list = []
+            if isinstance(_dev_data, dict):
+                _dev_list = _dev_data.get('list', [])
+                if not isinstance(_dev_list, list): _dev_list = []
+            for _d in _dev_list:
+                if not isinstance(_d, dict): continue
+                _did = _d.get('mac') or _d.get('deviceid') or _d.get('id', '')
+                if _did:
+                    self._debug("有设备连接 {}".format(_did))
+                    self._add_device_list({_did: _d}, True)
         elif fun == 'dev_disconnect':
-            self._debug("有设备断开连接 {}".format(data.get('data', {}).get('deviceid', '')))
-            self._add_device_list({data['data']['deviceid']: data['data']}, True)
+            _dev_data = data.get('data', {})
+            _dev_list = []
+            if isinstance(_dev_data, dict):
+                _dev_list = _dev_data.get('list', [])
+                if not isinstance(_dev_list, list): _dev_list = []
+            for _d in _dev_list:
+                if not isinstance(_d, dict): continue
+                _did = _d.get('mac') or _d.get('deviceid') or _d.get('id', '')
+                if _did:
+                    self._debug("有设备断开连接 {}".format(_did))
+                    self._add_device_list({_did: _d}, True)
         elif fun == 'dev_rotate':
             self._debug("设备屏幕方向发生变化 {}".format(data))
         elif fun == 'mouse_collection_cfg_ret':
@@ -1607,11 +1632,30 @@ class MyApp(QtWidgets.QMainWindow):
         elif fun == 'collection':
             self._debug("手机打开采集页面回调 {}".format(data))
         elif fun in ('dev_change', 'set_dev', '/device/set'):
-            self._debug("有设备配置发生改变 {}".format(data))
-            self._add_device_list({data['data']['deviceid']: data['data']}, True)
+            _dev_data = data.get('data', {})
+            _dev_list = []
+            if isinstance(_dev_data, dict):
+                _dev_list = _dev_data.get('list', [])
+                if not isinstance(_dev_list, list): _dev_list = []
+            for _d in _dev_list:
+                if not isinstance(_d, dict): continue
+                _did = _d.get('mac') or _d.get('deviceid') or _d.get('id', '')
+                if _did:
+                    self._debug("设备配置改变 {}".format(_did))
+                    self._add_device_list({_did: _d}, True)
         elif fun in ('get_device_list', '/device/get'):
             self._debug("获取设备列表成功")
-            self._add_device_list(data.get('data', {}))
+            _raw = data.get('data', {})
+            if isinstance(_raw, dict):
+                _lst = _raw.get('list', [])
+                if isinstance(_lst, list):
+                    _devdict = {}
+                    for _dev in _lst:
+                        if isinstance(_dev, dict):
+                            _key = _dev.get('mac') or _dev.get('deviceid') or _dev.get('id', '')
+                            if _key: _devdict[_key] = _dev
+                    _raw = _devdict
+            self._add_device_list(_raw)
         elif fun in ('get_devicemodel_list', '/config/devicemodel/get'):
             self._debug("获取支持型号列表成功")
             self.get_devicemodel_list = data.get('data', {})
@@ -1619,7 +1663,7 @@ class MyApp(QtWidgets.QMainWindow):
             self._debug("获取usb硬件列表成功")
             self._add_usb_list(data.get('data', {}))
         elif fun in ('del_dev', '/device/del'):
-            self._debug("删除设备{}成功".format(data.get('data', {}).get('deviceid', '')))
+            self._debug("删除设备成功")
             self.api.get_device_list(sync=False)
 
         if fun in ('get_device_screenshot', '/pic/screenshot'):
