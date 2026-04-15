@@ -60,29 +60,29 @@ T_APP_LAUNCH = 6.0; T_PAGE_LOAD = 3.5; T_CLICK = 1.5; T_SWIPE = 2.0
 TIKTOK_SCHEME = "snssdk1233://"
 
 # ── 自动更新配置 ──
-LOCAL_VERSION = "2.0.3"
+LOCAL_VERSION = "2.0.4"
 UPDATE_CHANNEL = "xp"  # "pro" 或 "xp"
 UPDATE_URLS = [
     "https://cdn.jsdelivr.net/gh/qiguaizhiru/imouse-automation@main",
     "https://raw.githubusercontent.com/qiguaizhiru/imouse-automation/main",
     "https://mirror.ghproxy.com/https://raw.githubusercontent.com/qiguaizhiru/imouse-automation/main",
 ]
-VIDEO_GRID = {1:(66,500),2:(200,450),3:(340,460),4:(60,630),5:(200,640),6:(340,640)}
-PX = {"profile_tab":(380,860),"three_dots":(378,686),"ad_auth_toggle":(365,290),
-      "authorize":(210,825),"save":(215,825),"manage":(350,465),"copy_code":(210,740),
-      "back":(26,73),"allow_popup":(290,495),"always_allow":(191,719)}
-SWIPE_ROW_Y=800; SWIPE_START_X=350; SWIPE_END_X=50
+VIDEO_GRID = {1:(90,540),2:(255,540),3:(410,550),4:(90,760),5:(255,760),6:(410,760)}
+PX = {"profile_tab":(450,1000),"three_dots":(463,829),"ad_auth_toggle":(444,351),
+      "authorize":(250,990),"save":(250,990),"manage":(420,560),"copy_code":(255,886),
+      "back":(30,90),"allow_popup":(290,495),"always_allow":(191,719)}
+SWIPE_ROW_Y=960; SWIPE_START_X=485; SWIPE_END_X=8
 ICON_SIM=0.7; SKIP_POPUP_CHECK=True
-AD_ICON_FILE="ad_settings_icon.png"; AD_SEARCH_RECT=[[0,750],[0,860],[414,750],[414,860]]
-AD_FALLBACK_POSITIONS=[(302,802),(220,802)]
+AD_ICON_FILE="ad_settings_icon.png"; AD_SEARCH_RECT=[[0,900],[0,1020],[500,900],[500,1020]]
+AD_FALLBACK_POSITIONS=[(280,957),(280,957)]
 AD_AUTH_ON_ICON_FILE="ad_auth_on.png"; AD_AUTH_ON_ICON_SIM=0.75
-AD_AUTH_ON_SEARCH_RECT=[[300,240],[300,340],[414,240],[414,340]]
-COPY_LINK_ICON_FILE="copy_link_icon.png"; COPY_LINK_SEARCH_RECT=[[0,670],[0,896],[414,670],[414,896]]
-COPY_LINK_FALLBACK=(72,810)
+AD_AUTH_ON_SEARCH_RECT=[[350,300],[350,400],[500,300],[500,400]]
+COPY_LINK_ICON_FILE="copy_link_icon.png"; COPY_LINK_SEARCH_RECT=[[0,800],[0,1100],[500,800],[500,1100]]
+COPY_LINK_FALLBACK=(100,960)
 THREE_DOTS_ICON_FILE="icon/three_dots_icon.bmp"; THREE_DOTS_ICON_SIM=0.70
-THREE_DOTS_SEARCH_RECT=[[250,500],[250,896],[414,500],[414,896]]
+THREE_DOTS_SEARCH_RECT=[[300,600],[300,1100],[500,600],[500,1100]]
 DONT_ALLOW_ICON_FILE="icon/dont_allow.bmp"; DONT_ALLOW_SIM=0.70
-DONT_ALLOW_SEARCH_RECT=[[0,0],[0,896],[414,0],[414,896]]  # 全屏
+DONT_ALLOW_SEARCH_RECT=[[0,0],[0,1100],[500,0],[500,1100]]  # 全屏
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ── 投流码: HTTP API 客户端 (直连 iMouse XP 9911 端口) ──
@@ -119,9 +119,27 @@ class _IMouseXPClient:
         rd = r.get("data",{})
         if isinstance(rd,dict): return rd.get("text","")
         return rd or None
+    def _conv_rect(self, rect, is_xywh=False):
+        """将rect转为XP格式 [lx,ty,rx,by]。
+        - 如果是4角点格式 [[x1,y1],[x2,y2],[x3,y3],[x4,y4]] → 提取 min/max
+        - 如果 is_xywh=True 且是 [x,y,w,h] → 转为 [x,y,x+w,y+h]
+        - 否则直接返回（假定已是 [lx,ty,rx,by]）
+        """
+        if rect is None: return None
+        try:
+            if len(rect) == 4 and all(isinstance(p, (list, tuple)) and len(p) == 2 for p in rect):
+                # 4角点格式
+                xs = [p[0] for p in rect]; ys = [p[1] for p in rect]
+                return [min(xs), min(ys), max(xs), max(ys)]
+            if is_xywh and len(rect) == 4:
+                x, y, w, h = rect
+                return [x, y, x + w, y + h]
+        except Exception: pass
+        return rect
     def find_image(self, did, img_b64, similarity=0.8, rect=None):
         data = {"id":did,"img_list":[img_b64],"similarity":similarity}
-        if rect: data["rect"]=rect
+        r2 = self._conv_rect(rect, is_xywh=False)
+        if r2: data["rect"] = r2
         r = self._post("/pic/find-image", data, quiet=True)
         if r and r.get("status")==200:
             rd=r.get("data",{}); lst=rd.get("list",[])
@@ -130,9 +148,11 @@ class _IMouseXPClient:
                 if len(centre)>=2: return (centre[0],centre[1],sim)
         return None
     def ocr(self, did, rect=None):
-        """OCR文字识别 - XP返回gdata.list"""
+        """OCR文字识别 - XP返回data.list, rect自动从[x,y,w,h]转换"""
         data = {"id":did}
-        if rect: data["rect"]=rect
+        # OCR的rect在Pro代码中用的是[x,y,w,h]格式
+        r2 = self._conv_rect(rect, is_xywh=True)
+        if r2: data["rect"] = r2
         r = self._post("/pic/ocr", data, quiet=True)
         if r and r.get("status")==200:
             d = r.get("data",{})
