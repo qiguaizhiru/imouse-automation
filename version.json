@@ -1,10 +1,10 @@
 {
   "pro": {
-    "version": "2.0.6",
-    "timestamp": "2026-04-15 17:32:06",
-    "changelog": "修复XP版im_connect崩溃问题",
+    "version": "2.0.7",
+    "timestamp": "2026-04-16 16:26:15",
+    "changelog": "TikHub app/v3+web双通道fallback",
     "files": {
-      "imouse6.16.py": "cd1f9c02e0f7f4c930be2ad99f464172d81e261b9a7f32fb43f774453faaf6e8",
+      "imouse6.16.py": "2b3506fb5fe0f3c8f88d8e09fcbb511930f72d9cdc1ff23df679eb1454ffeb3d",
       "tiktok_form.py": "8d0ef290ba4b7430e7986ecca80108a3632c30ef514a9d2e8d3d37b2917e41eb",
       "imouse_api.py": "39d6266e9ed50a806dc91af2ef219da88a85c2c099373cf90643aca2b87738c5",
       "icon/+black.bmp": "f405a1382acf291eba0fb40b297bfa67d77c3002aa736a9ac7ff16858d1de1d3",
@@ -24,11 +24,11 @@
     }
   },
   "xp": {
-    "version": "2.0.6",
-    "timestamp": "2026-04-15 17:32:06",
-    "changelog": "修复XP版im_connect崩溃问题",
+    "version": "2.0.7",
+    "timestamp": "2026-04-16 16:26:15",
+    "changelog": "TikHub app/v3+web双通道fallback",
     "files": {
-      "imouse6.16_xp.py": "ecaedff174e18dc7acc8612b06bf116f20e64aebd67c4d5b46644ef0b1edb92f",
+      "imouse6.16_xp.py": "c351d9f5e4764af9f0af09121cd8733eddc166c3b7740b9b3794cb627d0e5d44",
       "tiktok_form.py": "8d0ef290ba4b7430e7986ecca80108a3632c30ef514a9d2e8d3d37b2917e41eb",
       "imouse_api_xp.py": "91e583da502ca77b24e835e533d7fd734ebec14669f3c60011d75c0a549691b9",
       "icon/+black.bmp": "f405a1382acf291eba0fb40b297bfa67d77c3002aa736a9ac7ff16858d1de1d3",

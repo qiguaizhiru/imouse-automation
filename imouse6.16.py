@@ -58,7 +58,7 @@ T_APP_LAUNCH = 6.0; T_PAGE_LOAD = 3.5; T_CLICK = 1.5; T_SWIPE = 2.0
 TIKTOK_SCHEME = "snssdk1233://"
 
 # ── 自动更新配置 ──
-LOCAL_VERSION = "2.0.6"
+LOCAL_VERSION = "2.0.7"
 UPDATE_CHANNEL = "pro"  # "pro" 或 "xp"
 UPDATE_URLS = [
     "https://cdn.jsdelivr.net/gh/qiguaizhiru/imouse-automation@main",
@@ -232,7 +232,7 @@ class _FeishuClient:
             for rec in (r.get("data",{}).get("records") or []): ids.append(rec.get("record_id"))
         return ids
 
-# ── 投流码: TikHub 客户端 ──
+# ── 投流码: TikHub 客户端 (app/v3 优先，失败 fallback 到 web) ──
 class _TikHubClient:
     def __init__(self):
         self._s=_requests.Session()
@@ -247,17 +247,31 @@ class _TikHubClient:
             time.sleep(2**i)
         return None
     def fetch_user_info(self, uid):
+        """获取 secUid: 先 app/v3，失败 fallback web"""
+        # app/v3
         d=self._get("/api/v1/tiktok/app/v3/get_user_id_and_sec_user_id_by_username",{"username":uid})
         if d:
             inner=d.get("data",{}); sec=inner.get("sec_user_id","")
             if sec: return {"sec_uid":sec,"source":"app_v3"}
+        # fallback: web
+        d=self._get("/api/v1/tiktok/web/fetch_user_profile",{"uniqueId":uid})
+        if d:
+            user_info=d.get("data",{}).get("userInfo",d.get("data",{}))
+            user=user_info.get("user",user_info)
+            sec=user.get("secUid","")
+            if sec: return {"sec_uid":sec,"source":"web"}
         return None
     def fetch_user_videos(self, sec_uid, max_count=30, publish_after=None):
+        """获取用户视频: 先 app/v3，失败 fallback web"""
+        videos=self._fetch_videos_appv3(sec_uid, max_count, publish_after)
+        if videos: return videos
+        return self._fetch_videos_web(sec_uid, max_count, publish_after)
+    def _fetch_videos_appv3(self, sec_uid, max_count, publish_after):
         videos=[]; cursor=0
         while len(videos)<max_count:
             d=self._get("/api/v1/tiktok/app/v3/fetch_user_post_videos_v3",
                         {"sec_user_id":sec_uid,"count":min(30,max_count-len(videos)),"max_cursor":cursor,"sort_type":0})
-            if not d: break
+            if not d: return []
             inner=d.get("data",{})
             for a in (inner.get("aweme_list") or []):
                 aid=str(a.get("aweme_id") or a.get("id") or "")
@@ -273,7 +287,31 @@ class _TikHubClient:
             if not inner.get("has_more"): break
             cursor=inner.get("max_cursor",0); time.sleep(1)
         return videos
+    def _fetch_videos_web(self, sec_uid, max_count, publish_after):
+        videos=[]; cursor=0
+        while len(videos)<max_count:
+            d=self._get("/api/v1/tiktok/web/fetch_user_post",
+                        {"secUid":sec_uid,"count":min(20,max_count-len(videos)),"cursor":cursor})
+            if not d: return []
+            inner=d.get("data",{})
+            for a in (inner.get("itemList") or inner.get("items") or []):
+                aid=str(a.get("id") or a.get("aweme_id") or "")
+                if not aid: continue
+                ct=int(a.get("createTime") or 0)
+                if publish_after and ct<publish_after: continue
+                stats=a.get("stats") or a.get("statistics") or {}
+                videos.append({"aweme_id":aid,"create_time":ct,
+                    "play_count":int(stats.get("playCount") or stats.get("play_count") or 0),
+                    "digg_count":int(stats.get("diggCount") or stats.get("digg_count") or 0),
+                    "share_url":f"https://www.tiktok.com/@{a.get('author',{}).get('uniqueId','')}/video/{aid}",
+                    "is_pinned":bool(a.get("isPinnedItem") or a.get("is_top"))})
+            if not inner.get("hasMore"): break
+            cursor=inner.get("cursor",0); time.sleep(1)
+        return videos
     def resolve_share_url(self, url):
+        m=re.search(r'/video/(\d+)',url)
+        if m: return m.group(1)
+        # app/v3
         d=self._get("/api/v1/tiktok/app/v3/fetch_one_video_by_share_url",{"share_url":url})
         if d:
             a=d.get("data",{}).get("aweme_detail") or d.get("data",{})
@@ -281,18 +319,33 @@ class _TikHubClient:
             if aid: return aid
         return None
     def fetch_video_stats(self, share_url):
-        """通过视频链接获取播放量和点赞量"""
+        """获取视频统计: 先 app/v3，失败 fallback web"""
+        # app/v3
         d=self._get("/api/v1/tiktok/app/v3/fetch_one_video_by_share_url",{"share_url":share_url})
         if d:
             a=d.get("data",{}).get("aweme_detail") or d.get("data",{})
             stats=a.get("statistics") or {}
-            return {
-                "aweme_id":str(a.get("aweme_id") or a.get("id") or ""),
-                "play_count":int(stats.get("play_count") or 0),
-                "digg_count":int(stats.get("digg_count") or 0),
-                "comment_count":int(stats.get("comment_count") or 0),
-                "share_count":int(stats.get("share_count") or 0),
-            }
+            aid=str(a.get("aweme_id") or a.get("id") or "")
+            if aid:
+                return {"aweme_id":aid,
+                    "play_count":int(stats.get("play_count") or 0),
+                    "digg_count":int(stats.get("digg_count") or 0),
+                    "comment_count":int(stats.get("comment_count") or 0),
+                    "share_count":int(stats.get("share_count") or 0)}
+        # fallback: web
+        item_id=None
+        m=re.search(r'/video/(\d+)',share_url)
+        if m: item_id=m.group(1)
+        if not item_id: return None
+        d=self._get("/api/v1/tiktok/web/fetch_post_detail",{"itemId":item_id})
+        if d:
+            a=d.get("data",{}).get("itemInfo",{}).get("itemStruct",d.get("data",{}))
+            stats=a.get("stats") or {}
+            return {"aweme_id":str(a.get("id") or ""),
+                "play_count":int(stats.get("playCount") or stats.get("play_count") or 0),
+                "digg_count":int(stats.get("diggCount") or stats.get("digg_count") or 0),
+                "comment_count":int(stats.get("commentCount") or 0),
+                "share_count":int(stats.get("shareCount") or 0)}
         return None
 
 # ── 投流码: 工具函数 ──
