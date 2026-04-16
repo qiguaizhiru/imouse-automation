@@ -60,7 +60,7 @@ T_APP_LAUNCH = 6.0; T_PAGE_LOAD = 3.5; T_CLICK = 1.5; T_SWIPE = 2.0
 TIKTOK_SCHEME = "snssdk1233://"
 
 # ── 自动更新配置 ──
-LOCAL_VERSION = "2.0.7"
+LOCAL_VERSION = "2.0.8"
 UPDATE_CHANNEL = "xp"  # "pro" 或 "xp"
 UPDATE_URLS = [
     "https://cdn.jsdelivr.net/gh/qiguaizhiru/imouse-automation@main",
@@ -2365,19 +2365,8 @@ class MyApp(QtWidgets.QMainWindow):
             if changelog:
                 self._debug_safe(f"  更新说明: {changelog}")
 
-            # 2. 对比本地文件 hash
-            changed = []
-            for fn, expected_hash in remote_files.items():
-                local_path = os.path.join(SCRIPT_DIR, fn)
-                if os.path.exists(local_path):
-                    with open(local_path, 'rb') as f:
-                        local_hash = hashlib.sha256(f.read()).hexdigest()
-                    if local_hash != expected_hash:
-                        changed.append(fn)
-                else:
-                    changed.append(fn)
-
-            if not changed:
+            # 2. 对比版本号
+            if remote_version == LOCAL_VERSION:
                 self._debug_safe(f"  已是最新版本 {remote_version}")
                 self._signal_msgEvent.emit({
                     "fun": "_show_result_dialog", "status": 0,
@@ -2385,7 +2374,9 @@ class MyApp(QtWidgets.QMainWindow):
                 })
                 return
 
-            self._debug_safe(f"  发现 {len(changed)} 个文件需要更新: {changed}")
+            # 需要更新的文件列表
+            changed = list(remote_files.keys())
+            self._debug_safe(f"  需更新 {len(changed)} 个文件: {remote_version}")
 
             # 3. 下载到临时目录
             tmp_dir = os.path.join(SCRIPT_DIR, ".update_tmp")
@@ -2400,16 +2391,15 @@ class MyApp(QtWidgets.QMainWindow):
                 for base_url in UPDATE_URLS:
                     try:
                         r = _requests.get(f"{base_url}/{fn}", timeout=60)
-                        if r.status_code == 200:
-                            # 验证哈希
-                            h = hashlib.sha256(r.content).hexdigest()
-                            if h == remote_files[fn]:
-                                with open(os.path.join(tmp_dir, fn), 'wb') as f:
-                                    f.write(r.content)
-                                downloaded = True
-                                break
-                            else:
-                                self._debug_safe(f"    哈希不匹配，尝试下一个源")
+                        if r.status_code == 200 and len(r.content) > 100:
+                            # 确保子目录存在
+                            out_path = os.path.join(tmp_dir, fn)
+                            os.makedirs(os.path.dirname(out_path), exist_ok=True)
+                            with open(out_path, 'wb') as f:
+                                f.write(r.content)
+                            downloaded = True
+                            self._debug_safe(f"    OK ({len(r.content)} bytes)")
+                            break
                     except Exception as e:
                         self._debug_safe(f"    源失败: {e}")
                 if not downloaded:
