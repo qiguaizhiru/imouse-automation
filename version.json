@@ -28,7 +28,7 @@
     "timestamp": "2026-04-16 16:42:06",
     "changelog": "修复更新hash不匹配问题",
     "files": {
-      "imouse6.16_xp.py": "c351d9f5e4764af9f0af09121cd8733eddc166c3b7740b9b3794cb627d0e5d44",
+      "imouse6.16_xp.py": "22ffe3135b51670f56c9c41a9f7af57a876343e385d4504130405b068184e823",
       "tiktok_form.py": "8d0ef290ba4b7430e7986ecca80108a3632c30ef514a9d2e8d3d37b2917e41eb",
       "imouse_api_xp.py": "91e583da502ca77b24e835e533d7fd734ebec14669f3c60011d75c0a549691b9",
       "icon/+black.bmp": "f405a1382acf291eba0fb40b297bfa67d77c3002aa736a9ac7ff16858d1de1d3",
