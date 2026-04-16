@@ -1,8 +1,8 @@
 {
   "pro": {
     "version": "2.0.7",
-    "timestamp": "2026-04-16 16:26:15",
-    "changelog": "TikHub app/v3+web双通道fallback",
+    "timestamp": "2026-04-16 16:42:06",
+    "changelog": "修复更新hash不匹配问题",
     "files": {
       "imouse6.16.py": "2b3506fb5fe0f3c8f88d8e09fcbb511930f72d9cdc1ff23df679eb1454ffeb3d",
       "tiktok_form.py": "8d0ef290ba4b7430e7986ecca80108a3632c30ef514a9d2e8d3d37b2917e41eb",
@@ -25,8 +25,8 @@
   },
   "xp": {
     "version": "2.0.7",
-    "timestamp": "2026-04-16 16:26:15",
-    "changelog": "TikHub app/v3+web双通道fallback",
+    "timestamp": "2026-04-16 16:42:06",
+    "changelog": "修复更新hash不匹配问题",
     "files": {
       "imouse6.16_xp.py": "c351d9f5e4764af9f0af09121cd8733eddc166c3b7740b9b3794cb627d0e5d44",
       "tiktok_form.py": "8d0ef290ba4b7430e7986ecca80108a3632c30ef514a9d2e8d3d37b2917e41eb",
