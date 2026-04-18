@@ -60,7 +60,7 @@ T_APP_LAUNCH = 6.0; T_PAGE_LOAD = 3.5; T_CLICK = 1.5; T_SWIPE = 2.0
 TIKTOK_SCHEME = "snssdk1233://"
 
 # ── 自动更新配置 ──
-LOCAL_VERSION = "2.0.9"
+LOCAL_VERSION = "2.1.0"
 UPDATE_CHANNEL = "xp"  # "pro" 或 "xp"
 UPDATE_URLS = [
     "https://cdn.jsdelivr.net/gh/qiguaizhiru/imouse-automation@main",
@@ -471,21 +471,35 @@ def _match_video(share_url, videos, tikhub=None):
                 if v.get("aweme_id")==aid: return v
     return None
 
-def _do_ad_auth_flow(c,did,is_first=False):
+def _do_ad_auth_flow(c,did,is_first=False,log_fn=None):
+    def _log(msg):
+        if log_fn: log_fn(msg)
     def click(name,sleep=T_CLICK):
-        x,y=PX[name]; c.tap(did,x,y); time.sleep(sleep)
+        x,y=PX[name]; _log(f"    点击 {name} ({x},{y})"); c.tap(did,x,y); time.sleep(sleep)
+    _log(f"    [推流码] 步骤1: 点三个点")
     _find_click_three_dots(c,did); time.sleep(1.0)
     # 检测弹窗
+    _log(f"    [推流码] 步骤2: 检测弹窗")
     _dismiss_popup(c, did)
     time.sleep(1.0)
-    c.swipe(did,SWIPE_START_X,SWIPE_ROW_Y,SWIPE_END_X,SWIPE_ROW_Y); time.sleep(T_SWIPE)
+    _log(f"    [推流码] 步骤3: 滑动 ({SWIPE_START_X},{SWIPE_ROW_Y}) -> ({SWIPE_END_X},{SWIPE_ROW_Y})")
+    r_swipe = c.swipe(did,SWIPE_START_X,SWIPE_ROW_Y,SWIPE_END_X,SWIPE_ROW_Y)
+    _log(f"    [推流码] 滑动结果: {r_swipe}")
+    time.sleep(T_SWIPE)
     # Ad settings
+    _log(f"    [推流码] 步骤4: 找 Ad settings")
     ib=_load_icon(AD_ICON_FILE)
     if ib:
         r=c.find_image(did,ib,ICON_SIM,AD_SEARCH_RECT)
-        if r: c.tap(did,r[0],r[1])
-        else: c.tap(did,AD_FALLBACK_POSITIONS[0][0],AD_FALLBACK_POSITIONS[0][1])
-    else: c.tap(did,AD_FALLBACK_POSITIONS[0][0],AD_FALLBACK_POSITIONS[0][1])
+        if r:
+            _log(f"    [推流码] 识图找到 Ad settings ({r[0]},{r[1]})")
+            c.tap(did,r[0],r[1])
+        else:
+            _log(f"    [推流码] 识图未找到，用兜底坐标 {AD_FALLBACK_POSITIONS[0]}")
+            c.tap(did,AD_FALLBACK_POSITIONS[0][0],AD_FALLBACK_POSITIONS[0][1])
+    else:
+        _log(f"    [推流码] 图标文件 {AD_ICON_FILE} 不存在，用兜底坐标 {AD_FALLBACK_POSITIONS[0]}")
+        c.tap(did,AD_FALLBACK_POSITIONS[0][0],AD_FALLBACK_POSITIONS[0][1])
     time.sleep(10.0 if is_first else 4.5)
     # Check toggle
     already_on=False
@@ -529,7 +543,7 @@ def _process_device_videos(c,feishu,did,remaining,video_nums=None,tikhub=None):
             results.append({"pos":pos,"status":"ok","ad_code":matched["ad_code"]})
             if matched in remaining: remaining.remove(matched)
             continue
-        ad_code=_do_ad_auth_flow(c,did,is_first=is_first)
+        ad_code=_do_ad_auth_flow(c,did,is_first=is_first,log_fn=log_fn)
         is_first=False
         if ad_code and matched.get("record_id") and VIDEO_TABLE_ID:
             try: feishu.batch_update_records(VIDEO_TABLE_ID,[{"record_id":matched["record_id"],"fields":{VIDEO_FIELDS["ad_code"]:ad_code}}])
@@ -2220,7 +2234,7 @@ class MyApp(QtWidgets.QMainWindow):
                         time.sleep(1.0)
 
                         # 推流码流程（_do_ad_auth_flow 内部会先点三个点）
-                        ad_code = _do_ad_auth_flow(c, did, is_first=(ti == 0))
+                        ad_code = _do_ad_auth_flow(c, did, is_first=(ti == 0), log_fn=self._debug_safe)
 
                         if ad_code:
                             self._debug_safe(f"  [{name}] 推流码: {ad_code}")

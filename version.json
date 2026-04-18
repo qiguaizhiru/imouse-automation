@@ -1,8 +1,8 @@
 {
   "pro": {
-    "version": "2.0.9",
-    "timestamp": "2026-04-18 14:34:14",
-    "changelog": "分组名改为tuwen/shipin",
+    "version": "2.1.0",
+    "timestamp": "2026-04-18 16:43:05",
+    "changelog": "推流码流程加调试日志",
     "files": {
       "imouse6.16.py": "1",
       "tiktok_form.py": "1",
@@ -10,9 +10,9 @@
     }
   },
   "xp": {
-    "version": "2.0.9",
-    "timestamp": "2026-04-18 14:34:14",
-    "changelog": "分组名改为tuwen/shipin",
+    "version": "2.1.0",
+    "timestamp": "2026-04-18 16:43:05",
+    "changelog": "推流码流程加调试日志",
     "files": {
       "imouse6.16_xp.py": "1",
       "tiktok_form.py": "1",
