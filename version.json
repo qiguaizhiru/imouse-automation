@@ -1,8 +1,8 @@
 {
   "pro": {
-    "version": "2.0.8",
-    "timestamp": "2026-04-16 16:45:50",
-    "changelog": "简化更新机制-用版本号对比代替hash验证",
+    "version": "2.0.9",
+    "timestamp": "2026-04-18 14:34:14",
+    "changelog": "分组名改为tuwen/shipin",
     "files": {
       "imouse6.16.py": "1",
       "tiktok_form.py": "1",
@@ -10,9 +10,9 @@
     }
   },
   "xp": {
-    "version": "2.0.8",
-    "timestamp": "2026-04-16 16:45:50",
-    "changelog": "简化更新机制-用版本号对比代替hash验证",
+    "version": "2.0.9",
+    "timestamp": "2026-04-18 14:34:14",
+    "changelog": "分组名改为tuwen/shipin",
     "files": {
       "imouse6.16_xp.py": "1",
       "tiktok_form.py": "1",

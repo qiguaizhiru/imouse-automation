@@ -60,7 +60,7 @@ T_APP_LAUNCH = 6.0; T_PAGE_LOAD = 3.5; T_CLICK = 1.5; T_SWIPE = 2.0
 TIKTOK_SCHEME = "snssdk1233://"
 
 # ── 自动更新配置 ──
-LOCAL_VERSION = "2.0.8"
+LOCAL_VERSION = "2.0.9"
 UPDATE_CHANNEL = "xp"  # "pro" 或 "xp"
 UPDATE_URLS = [
     "https://cdn.jsdelivr.net/gh/qiguaizhiru/imouse-automation@main",
@@ -3896,7 +3896,7 @@ class MyApp(QtWidgets.QMainWindow):
         folder = self.__ui.lineEdit_upload_folder.text().strip()
         if not folder or not os.path.isdir(folder):
             self._debug("请先选择图片文件夹"); return
-        self._batch_upload_media(folder, '图文',
+        self._batch_upload_media(folder, 'tuwen',
             ('*.jpg', '*.jpeg', '*.png', '*.bmp', '*.gif', '*.webp'), '图片')
 
     def _batch_upload_videos(self):
@@ -3904,7 +3904,7 @@ class MyApp(QtWidgets.QMainWindow):
         folder = self.__ui.lineEdit_upload_video_folder.text().strip()
         if not folder or not os.path.isdir(folder):
             self._debug("请先选择视频文件夹"); return
-        self._batch_upload_media(folder, '视频',
+        self._batch_upload_media(folder, 'shipin',
             ('*.mp4', '*.mov', '*.avi', '*.m4v', '*.mkv', '*.wmv'), '视频')
 
     def _batch_upload_media(self, folder, group_keyword, file_exts, file_desc):
