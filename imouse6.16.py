@@ -58,7 +58,7 @@ T_APP_LAUNCH = 6.0; T_PAGE_LOAD = 3.5; T_CLICK = 1.5; T_SWIPE = 2.0
 TIKTOK_SCHEME = "snssdk1233://"
 
 # ── 自动更新配置 ──
-LOCAL_VERSION = "2.1.1"
+LOCAL_VERSION = "2.1.2"
 UPDATE_CHANNEL = "pro"  # "pro" 或 "xp"
 UPDATE_URLS = [
     "https://cdn.jsdelivr.net/gh/qiguaizhiru/imouse-automation@main",
@@ -1319,7 +1319,7 @@ class MyApp(QtWidgets.QMainWindow):
         self._debug("正在查找图片...")
         try:
             ret = self.api.find_image(deviceid, template_img_bytes, None, False, 0.7)
-            if ret and ret.get('status', -1) == 0:
+            if ret and ret.get('status', -1) in (0, 200):
                 data = ret.get('data', {})
                 if data.get('code', -1) == 0:
                     result = data.get('result', [])
@@ -1350,7 +1350,7 @@ class MyApp(QtWidgets.QMainWindow):
                 with open('icon/Add a catchy title.bmp', 'rb') as f:
                     icon_bytes = f.read()
                 ret = self.api.find_image(deviceid, icon_bytes, None, False, 0.7)
-                if ret and ret.get('status', -1) == 0:
+                if ret and ret.get('status', -1) in (0, 200):
                     data = ret.get('data', {})
                     if data.get('code', -1) == 0:
                         result = data.get('result', [])
@@ -1406,7 +1406,7 @@ class MyApp(QtWidgets.QMainWindow):
         self._debug("正在查找视频...")
         try:
             ret = self.api.find_image(deviceid, template_img_bytes, None, False, 0.7)
-            if ret and ret.get('status', -1) == 0:
+            if ret and ret.get('status', -1) in (0, 200):
                 data = ret.get('data', {})
                 if data.get('code', -1) == 0:
                     result = data.get('result', [])
@@ -1437,7 +1437,7 @@ class MyApp(QtWidgets.QMainWindow):
                 with open('icon/Add description.bmp', 'rb') as f:
                     icon_bytes = f.read()
                 ret = self.api.find_image(deviceid, icon_bytes, None, False, 0.7)
-                if ret and ret.get('status', -1) == 0:
+                if ret and ret.get('status', -1) in (0, 200):
                     data = ret.get('data', {})
                     if data.get('code', -1) == 0:
                         result = data.get('result', [])
@@ -1476,7 +1476,7 @@ class MyApp(QtWidgets.QMainWindow):
             with open(image_path, 'rb') as f:
                 img_bytes = f.read()
             ret = self.api.find_image(deviceid, img_bytes, None, False, threshold)
-            if ret and ret.get('status', -1) == 0:
+            if ret and ret.get('status', -1) in (0, 200):
                 data = ret.get('data', {})
                 if data.get('code', -1) == 0:
                     result = data.get('result', [])
@@ -1772,7 +1772,7 @@ class MyApp(QtWidgets.QMainWindow):
 
                             confirm_thread.join(timeout=5)
 
-                            if del_ret and del_ret.get('status', -1) == 0:
+                            if del_ret and del_ret.get('status', -1) in (0, 200):
                                 total_deleted += len(file_names)
                                 self._debug_safe(f"  {name}: 删除 {len(file_names)} 张成功 (累计 {total_deleted})")
                                 del_ok = True
@@ -3985,7 +3985,7 @@ class MyApp(QtWidgets.QMainWindow):
                         devlist=[],
                         outtime=180000  # 3分钟超时
                     )
-                    if ret and ret.get('status', -1) == 0:
+                    if ret and ret.get('status', -1) in (0, 200):
                         self._debug_safe(f"  [OK] {name}: {total} 个{file_desc}上传成功")
                         return True
                     else:
