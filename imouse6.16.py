@@ -58,7 +58,7 @@ T_APP_LAUNCH = 6.0; T_PAGE_LOAD = 3.5; T_CLICK = 1.5; T_SWIPE = 2.0
 TIKTOK_SCHEME = "snssdk1233://"
 
 # ── 自动更新配置 ──
-LOCAL_VERSION = "2.1.0"
+LOCAL_VERSION = "2.1.1"
 UPDATE_CHANNEL = "pro"  # "pro" 或 "xp"
 UPDATE_URLS = [
     "https://cdn.jsdelivr.net/gh/qiguaizhiru/imouse-automation@main",
@@ -3858,15 +3858,40 @@ class MyApp(QtWidgets.QMainWindow):
         ic = _IMouseProClient("127.0.0.1", IMOUSE_PRO_PORT)
         gr = ic._post("get_group_list", {})
         target_gids = set()
-        if gr and gr.get("status") == 0:
+        if gr and gr.get("status") in (0, 200):
             gd = gr.get("data", {})
-            if isinstance(gd, dict):
+            # 兼容XP: data可能是{list:[...]}
+            if isinstance(gd, dict) and "list" in gd and isinstance(gd["list"], list):
+                for gi in gd["list"]:
+                    if isinstance(gi, dict):
+                        gname = gi.get("name", "")
+                        gid = str(gi.get("id", ""))
+                        self._debug(f"  分组: gid={gid} name={gname}")
+                        if group_keyword in gname:
+                            target_gids.add(gid)
+            elif isinstance(gd, dict):
                 for gid, gi in gd.items():
                     gname = gi.get("name", "") if isinstance(gi, dict) else str(gi)
+                    self._debug(f"  分组: gid={gid} name={gname}")
                     if group_keyword in gname:
                         target_gids.add(str(gid))
+        else:
+            self._debug(f"  获取分组列表失败: {gr}")
         if not target_gids:
             self._debug(f"未找到分组名包含'{group_keyword}'的分组，请检查分组名称"); return
+        self._debug(f"  目标分组gid: {target_gids}")
+
+        # 打印每个在线设备的gid供对照
+        online_count = 0
+        for did, info in self.device_list.items():
+            if info.get('state', 0) != 0:
+                online_count += 1
+                dev_gid = str(info.get('gid', ''))
+                matched = "<<匹配>>" if dev_gid in target_gids else ""
+                if online_count <= 5 or matched:
+                    self._debug(f"  设备 {info.get('name','?')} gid={dev_gid} {matched}")
+        if online_count > 5:
+            self._debug(f"  ... 共 {online_count} 台在线设备")
 
         # 按自定义名（name）字母排序，与UI显示顺序一致
         group_devices = sorted(
@@ -3881,15 +3906,27 @@ class MyApp(QtWidgets.QMainWindow):
         for i, (did, info) in enumerate(group_devices):
             self._debug(f"  第{i+1}台: {info.get('name', did)}")
 
-        # 收集文件（去重）
+        # 收集文件（去重，只取第一个匹配的扩展名，避免同名不同格式导致翻倍）
         import glob
-        seen = set()
+        seen_normcase = set()   # 去重：完全相同的文件路径（不区分大小写）
+        seen_stem = set()       # 去重：相同文件名前缀（不同格式如 1.jpg/1.png 只取一个）
         files = []
         for ext in file_exts:
+            count_ext = 0
             for fp in glob.glob(os.path.join(folder, ext)):
                 key = os.path.normcase(fp)
-                if key not in seen:
-                    seen.add(key); files.append(fp)
+                if key in seen_normcase:
+                    continue
+                seen_normcase.add(key)
+                # 用文件名（不含扩展名）去重，避免同一个编号多种格式
+                stem = os.path.splitext(os.path.basename(fp).lower())[0]
+                if stem in seen_stem:
+                    continue
+                seen_stem.add(stem)
+                files.append(fp)
+                count_ext += 1
+            if count_ext > 0:
+                self._debug(f"  {ext}: {count_ext} 个文件")
         if not files:
             self._debug(f"文件夹中没有{file_desc}文件"); return
 
