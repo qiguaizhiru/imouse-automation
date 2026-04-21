@@ -58,7 +58,7 @@ T_APP_LAUNCH = 6.0; T_PAGE_LOAD = 3.5; T_CLICK = 1.5; T_SWIPE = 2.0
 TIKTOK_SCHEME = "snssdk1233://"
 
 # ── 自动更新配置 ──
-LOCAL_VERSION = "2.1.3"
+LOCAL_VERSION = "2.1.4"
 UPDATE_CHANNEL = "pro"  # "pro" 或 "xp"
 UPDATE_URLS = [
     "https://cdn.jsdelivr.net/gh/qiguaizhiru/imouse-automation@main",

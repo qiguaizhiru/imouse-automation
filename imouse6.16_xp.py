@@ -60,7 +60,7 @@ T_APP_LAUNCH = 6.0; T_PAGE_LOAD = 3.5; T_CLICK = 1.5; T_SWIPE = 2.0
 TIKTOK_SCHEME = "snssdk1233://"
 
 # ── 自动更新配置 ──
-LOCAL_VERSION = "2.1.3"
+LOCAL_VERSION = "2.1.4"
 UPDATE_CHANNEL = "xp"  # "pro" 或 "xp"
 UPDATE_URLS = [
     "https://cdn.jsdelivr.net/gh/qiguaizhiru/imouse-automation@main",
@@ -1676,7 +1676,7 @@ class MyApp(QtWidgets.QMainWindow):
                 if not isinstance(_dev_list, list): _dev_list = []
             for _d in _dev_list:
                 if not isinstance(_d, dict): continue
-                _did = _d.get('mac') or _d.get('deviceid') or _d.get('id', '')
+                _did = _d.get('deviceid') or _d.get('mac') or _d.get('id', '')
                 if _did:
                     self._debug("有设备连接 {}".format(_did))
                     self._add_device_list({_did: _d}, True)
@@ -1688,7 +1688,7 @@ class MyApp(QtWidgets.QMainWindow):
                 if not isinstance(_dev_list, list): _dev_list = []
             for _d in _dev_list:
                 if not isinstance(_d, dict): continue
-                _did = _d.get('mac') or _d.get('deviceid') or _d.get('id', '')
+                _did = _d.get('deviceid') or _d.get('mac') or _d.get('id', '')
                 if _did:
                     self._debug("有设备断开连接 {}".format(_did))
                     self._add_device_list({_did: _d}, True)
@@ -1706,7 +1706,7 @@ class MyApp(QtWidgets.QMainWindow):
                 if not isinstance(_dev_list, list): _dev_list = []
             for _d in _dev_list:
                 if not isinstance(_d, dict): continue
-                _did = _d.get('mac') or _d.get('deviceid') or _d.get('id', '')
+                _did = _d.get('deviceid') or _d.get('mac') or _d.get('id', '')
                 if _did:
                     self._debug("设备配置改变 {}".format(_did))
                     self._add_device_list({_did: _d}, True)
@@ -1719,7 +1719,7 @@ class MyApp(QtWidgets.QMainWindow):
                     _devdict = {}
                     for _dev in _lst:
                         if isinstance(_dev, dict):
-                            _key = _dev.get('mac') or _dev.get('deviceid') or _dev.get('id', '')
+                            _key = _dev.get('deviceid') or _dev.get('mac') or _dev.get('id', '')
                             if _key: _devdict[_key] = _dev
                     _raw = _devdict
             self._add_device_list(_raw)
