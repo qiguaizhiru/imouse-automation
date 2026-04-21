@@ -58,7 +58,7 @@ T_APP_LAUNCH = 6.0; T_PAGE_LOAD = 3.5; T_CLICK = 1.5; T_SWIPE = 2.0
 TIKTOK_SCHEME = "snssdk1233://"
 
 # ── 自动更新配置 ──
-LOCAL_VERSION = "2.1.2"
+LOCAL_VERSION = "2.1.3"
 UPDATE_CHANNEL = "pro"  # "pro" 或 "xp"
 UPDATE_URLS = [
     "https://cdn.jsdelivr.net/gh/qiguaizhiru/imouse-automation@main",
@@ -3973,31 +3973,48 @@ class MyApp(QtWidgets.QMainWindow):
         fail = 0
 
         def _upload_one_device(did, name, file_list):
+            """分批上传（每批5个），检查 data.code 确认真正成功"""
             total = len(file_list)
-            self._debug_safe(f"  [{name}] 开始上传 {total} 个{file_desc}...")
+            BATCH_SIZE = 5  # 官方SDK也用5个一批
+            self._debug_safe(f"  [{name}] 开始上传 {total} 个{file_desc} (分{(total+BATCH_SIZE-1)//BATCH_SIZE}批)...")
 
-            for retry in range(1, MAX_RETRIES + 1):
-                try:
-                    ret = self.api.shortcut_up_photo(
-                        deviceid=did,
-                        files=file_list,
-                        name='Recents',
-                        devlist=[],
-                        outtime=180000  # 3分钟超时
-                    )
-                    if ret and ret.get('status', -1) in (0, 200):
-                        self._debug_safe(f"  [OK] {name}: {total} 个{file_desc}上传成功")
-                        return True
-                    else:
-                        msg = ret.get('message', '未知错误') if ret else '无响应'
-                        self._debug_safe(f"  [{name}] 第{retry}次上传失败: {msg}")
-                        if retry < MAX_RETRIES:
-                            time.sleep(3)
-                except Exception as e:
-                    self._debug_safe(f"  [{name}] 第{retry}次上传异常: {e}")
-                    if retry < MAX_RETRIES:
-                        time.sleep(3)
-            return False
+            batches = [file_list[i:i+BATCH_SIZE] for i in range(0, total, BATCH_SIZE)]
+            ok_count = 0
+            for bi, batch in enumerate(batches):
+                success = False
+                for retry in range(1, MAX_RETRIES + 1):
+                    try:
+                        ret = self.api.shortcut_up_photo(
+                            deviceid=did,
+                            files=batch,
+                            name='Recents',
+                            devlist=[],
+                            outtime=60000  # 每批60秒
+                        )
+                        status_ok = ret and ret.get('status', -1) in (0, 200)
+                        # 检查 data.code (XP: 0=成功)
+                        data = (ret or {}).get('data', {}) or {}
+                        code_ok = data.get('code', -1) == 0 if status_ok else False
+                        if status_ok and code_ok:
+                            ok_count += len(batch)
+                            self._debug_safe(f"  [{name}] 第{bi+1}/{len(batches)}批: {len(batch)}个 OK")
+                            success = True
+                            break
+                        else:
+                            code = data.get('code', '?')
+                            msg = data.get('message') or (ret.get('message','') if ret else '无响应')
+                            self._debug_safe(f"  [{name}] 第{bi+1}批第{retry}次失败: code={code} msg={msg}")
+                            if retry < MAX_RETRIES: time.sleep(3)
+                    except Exception as e:
+                        self._debug_safe(f"  [{name}] 第{bi+1}批第{retry}次异常: {e}")
+                        if retry < MAX_RETRIES: time.sleep(3)
+                if not success:
+                    self._debug_safe(f"  [{name}] 第{bi+1}批彻底失败，已放弃")
+                    return False
+                time.sleep(1)  # 批间等待
+
+            self._debug_safe(f"  [OK] {name}: {ok_count}/{total} 个{file_desc}上传成功")
+            return ok_count == total
 
         with ThreadPoolExecutor(max_workers=3) as pool:
             futures = {}

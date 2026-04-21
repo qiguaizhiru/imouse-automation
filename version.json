@@ -1,8 +1,8 @@
 {
   "pro": {
-    "version": "2.1.2",
-    "timestamp": "2026-04-20 16:29:28",
-    "changelog": "修复上传status判断(0/200兼容)",
+    "version": "2.1.3",
+    "timestamp": "2026-04-21 14:50:02",
+    "changelog": "上传分批5个+检查data.code",
     "files": {
       "imouse6.16.py": "1",
       "tiktok_form.py": "1",
@@ -10,9 +10,9 @@
     }
   },
   "xp": {
-    "version": "2.1.2",
-    "timestamp": "2026-04-20 16:29:28",
-    "changelog": "修复上传status判断(0/200兼容)",
+    "version": "2.1.3",
+    "timestamp": "2026-04-21 14:50:02",
+    "changelog": "上传分批5个+检查data.code",
     "files": {
       "imouse6.16_xp.py": "1",
       "tiktok_form.py": "1",
