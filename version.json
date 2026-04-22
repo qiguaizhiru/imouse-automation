@@ -1,8 +1,8 @@
 {
   "pro": {
-    "version": "2.1.4",
-    "timestamp": "2026-04-21 17:09:24",
-    "changelog": "修复id不存在:优先用deviceid",
+    "version": "2.1.5",
+    "timestamp": "2026-04-22 14:34:38",
+    "changelog": "账号表换成tblqIhS037A7v99R",
     "files": {
       "imouse6.16.py": "1",
       "tiktok_form.py": "1",
@@ -10,9 +10,9 @@
     }
   },
   "xp": {
-    "version": "2.1.4",
-    "timestamp": "2026-04-21 17:09:24",
-    "changelog": "修复id不存在:优先用deviceid",
+    "version": "2.1.5",
+    "timestamp": "2026-04-22 14:34:38",
+    "changelog": "账号表换成tblqIhS037A7v99R",
     "files": {
       "imouse6.16_xp.py": "1",
       "tiktok_form.py": "1",

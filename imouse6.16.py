@@ -39,7 +39,8 @@ from tiktok_form import Ui_MainWindow
 FEISHU_APP_ID       = "cli_a99b14fa3b7d900d"
 FEISHU_APP_SECRET   = "ZTawO0DxS1k06DTXYEiDAg8ACWaGCONz"
 FEISHU_APP_TOKEN    = "NOulwz2X3i6Eg9kU9L0cnh8Qnyg"
-ACCOUNT_TABLE_ID    = "tblSQjP08dsoCoP9"
+ACCOUNT_TABLE_ID    = "tblqIhS037A7v99R"
+ACCOUNT_VIEW_ID     = "vewlHYA0vk"
 VIDEO_TABLE_ID      = "tbld59fY7wCYtEsC"
 VIDEO_VIEW_ID       = "vew2Yve4BL"
 VIDEO_FIELDS = {
@@ -49,7 +50,7 @@ VIDEO_FIELDS = {
     "publish_date_text": "发布日期-20260305", "vid": "vid",
     "completion_rate": "T7 完播率",
 }
-ACCOUNT_FIELDS = {"account_id": "账号id", "account_name": "账号昵称", "status": "使用状态", "usage": "账号用途"}
+ACCOUNT_FIELDS = {"account_id": "账号ID", "account_name": "账号昵称", "status": "使用状态", "usage": "使用人"}
 TIKHUB_BASE_URL = "https://api.tikhub.io"
 TIKHUB_TOKEN = "5+UtWGJ7zHdyjAoejG6rpUMM9CsrpZPAvIpF4Dm/vkhx7xAXcu9C+AHsCA=="
 IMOUSE_PRO_PORT = 9912
@@ -58,7 +59,7 @@ T_APP_LAUNCH = 6.0; T_PAGE_LOAD = 3.5; T_CLICK = 1.5; T_SWIPE = 2.0
 TIKTOK_SCHEME = "snssdk1233://"
 
 # ── 自动更新配置 ──
-LOCAL_VERSION = "2.1.4"
+LOCAL_VERSION = "2.1.5"
 UPDATE_CHANNEL = "pro"  # "pro" 或 "xp"
 UPDATE_URLS = [
     "https://cdn.jsdelivr.net/gh/qiguaizhiru/imouse-automation@main",
@@ -543,7 +544,7 @@ def run_adcode_full(phase="all", port=9912, workers=20, days=1, videos_str="", m
         feishu=_FeishuClient(FEISHU_APP_ID,FEISHU_APP_SECRET,FEISHU_APP_TOKEN)
         tikhub=_TikHubClient()
         # 获取账号
-        recs=feishu.search_records(ACCOUNT_TABLE_ID,
+        recs=feishu.search_records(ACCOUNT_TABLE_ID, view_id=ACCOUNT_VIEW_ID,
             filter_obj={"conjunction":"and","conditions":[{"field_name":ACCOUNT_FIELDS["status"],"operator":"is","value":["更新中"]}]})
         accounts=[]
         for rec in recs:
@@ -1924,7 +1925,7 @@ class MyApp(QtWidgets.QMainWindow):
             tikhub = _TikHubClient()
 
             # 获取飞书账号表中「更新中」的账号
-            recs = feishu.search_records(ACCOUNT_TABLE_ID,
+            recs = feishu.search_records(ACCOUNT_TABLE_ID, view_id=ACCOUNT_VIEW_ID,
                 filter_obj={"conjunction":"and","conditions":[{"field_name":ACCOUNT_FIELDS["status"],"operator":"is","value":["更新中"]}]})
             all_accounts = []
             for rec in recs:
