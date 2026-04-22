@@ -43,6 +43,9 @@ FEISHU_APP_SECRET   = "ZTawO0DxS1k06DTXYEiDAg8ACWaGCONz"
 FEISHU_APP_TOKEN    = "NOulwz2X3i6Eg9kU9L0cnh8Qnyg"
 ACCOUNT_TABLE_ID    = "tblqIhS037A7v99R"
 ACCOUNT_VIEW_ID     = "vewlHYA0vk"
+# 视频表"账号编号"字段关联的是旧账号表，写视频时仍需用旧表的record_id
+OLD_ACCOUNT_TABLE_ID = "tblSQjP08dsoCoP9"
+OLD_ACCOUNT_FIELD_ACCOUNT_ID = "账号id"  # 旧表是小写id
 VIDEO_TABLE_ID      = "tbld59fY7wCYtEsC"
 VIDEO_VIEW_ID       = "vew2Yve4BL"
 VIDEO_FIELDS = {
@@ -61,7 +64,7 @@ T_APP_LAUNCH = 6.0; T_PAGE_LOAD = 3.5; T_CLICK = 1.5; T_SWIPE = 2.0
 TIKTOK_SCHEME = "snssdk1233://"
 
 # ── 自动更新配置 ──
-LOCAL_VERSION = "2.1.6"
+LOCAL_VERSION = "2.1.7"
 UPDATE_CHANNEL = "xp"  # "pro" 或 "xp"
 UPDATE_URLS = [
     # jsDelivr 4个镜像
@@ -657,7 +660,19 @@ def run_adcode_full(phase="all", port=9911, workers=20, days=1, videos_str="", m
                     vid_to_rec[aweme_id]=rec_info
         log_fn(f"  表中已有 {len(existing_vids)} 个视频")
 
-        uid_to_rid={a["unique_id"]:a["record_id"] for a in accounts if a.get("record_id")}
+        # 从旧账号表查询 account_id → record_id 映射（视频表"账号编号"字段关联到旧表）
+        log_fn("  从旧账号表获取 record_id 映射...")
+        try:
+            old_recs = feishu.search_records(OLD_ACCOUNT_TABLE_ID)
+            uid_to_rid = {}
+            for r in old_recs:
+                rf = r.get("fields") or {}
+                u = _normalize_account_id(_normalize_text(rf.get(OLD_ACCOUNT_FIELD_ACCOUNT_ID)))
+                if u and r.get("record_id"): uid_to_rid[u] = r["record_id"]
+            log_fn(f"  旧账号表映射 {len(uid_to_rid)} 条")
+        except Exception as e:
+            log_fn(f"  查询旧账号表失败: {e}")
+            uid_to_rid = {a["unique_id"]:a["record_id"] for a in accounts if a.get("record_id")}
         new_recs=[]; rec_to_acc=[]; updates_to_apply=[]
         for uid,vids in video_data.items():
             arid=uid_to_rid.get(uid)
@@ -2091,10 +2106,27 @@ class MyApp(QtWidgets.QMainWindow):
                         existing_vids.add(aweme_id)
                         vid_to_rec[aweme_id] = rec_info
 
-            uid_to_rid = {a["unique_id"]: a["record_id"] for a in accounts if a.get("record_id")}
+            # 从旧账号表查询 account_id → record_id 映射（视频表"账号编号"字段关联到旧表）
+            self._debug_safe("  从旧账号表获取 record_id 映射...")
+            try:
+                old_recs = feishu.search_records(OLD_ACCOUNT_TABLE_ID)
+                uid_to_rid = {}
+                for rec in old_recs:
+                    f = rec.get("fields") or {}
+                    uid = _normalize_account_id(_normalize_text(f.get(OLD_ACCOUNT_FIELD_ACCOUNT_ID)))
+                    if uid and rec.get("record_id"):
+                        uid_to_rid[uid] = rec["record_id"]
+                self._debug_safe(f"  旧账号表映射 {len(uid_to_rid)} 条")
+            except Exception as e:
+                self._debug_safe(f"  查询旧账号表失败: {e}")
+                uid_to_rid = {}
+
             new_recs = []
+            unlinked_count = 0
             for uid, vids in video_data.items():
                 arid = uid_to_rid.get(uid)
+                if not arid:
+                    unlinked_count += len(vids)
                 for v in vids:
                     aid = v["aweme_id"]
                     if aid in existing_vids: continue
@@ -2114,6 +2146,8 @@ class MyApp(QtWidgets.QMainWindow):
                     if arid:
                         rec[VIDEO_FIELDS["account_link"]] = [arid]
                     new_recs.append(rec)
+            if unlinked_count:
+                self._debug_safe(f"  警告: {unlinked_count} 个视频在旧账号表中找不到对应账号，账号编号字段会为空")
 
             if new_recs:
                 self._debug_safe(f"  新增 {len(new_recs)} 条记录到飞书...")

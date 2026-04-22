@@ -1,8 +1,8 @@
 {
   "pro": {
-    "version": "2.1.6",
-    "timestamp": "2026-04-22 16:31:03",
-    "changelog": "更新源增加到8个镜像",
+    "version": "2.1.7",
+    "timestamp": "2026-04-22 17:02:04",
+    "changelog": "账号编号字段从旧账号表查record_id",
     "files": {
       "imouse6.16.py": "1",
       "tiktok_form.py": "1",
@@ -10,9 +10,9 @@
     }
   },
   "xp": {
-    "version": "2.1.6",
-    "timestamp": "2026-04-22 16:31:03",
-    "changelog": "更新源增加到8个镜像",
+    "version": "2.1.7",
+    "timestamp": "2026-04-22 17:02:04",
+    "changelog": "账号编号字段从旧账号表查record_id",
     "files": {
       "imouse6.16_xp.py": "1",
       "tiktok_form.py": "1",
