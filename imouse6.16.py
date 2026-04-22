@@ -59,11 +59,19 @@ T_APP_LAUNCH = 6.0; T_PAGE_LOAD = 3.5; T_CLICK = 1.5; T_SWIPE = 2.0
 TIKTOK_SCHEME = "snssdk1233://"
 
 # ── 自动更新配置 ──
-LOCAL_VERSION = "2.1.5"
+LOCAL_VERSION = "2.1.6"
 UPDATE_CHANNEL = "pro"  # "pro" 或 "xp"
 UPDATE_URLS = [
+    # jsDelivr 4个镜像
     "https://cdn.jsdelivr.net/gh/qiguaizhiru/imouse-automation@main",
+    "https://fastly.jsdelivr.net/gh/qiguaizhiru/imouse-automation@main",
+    "https://gcore.jsdelivr.net/gh/qiguaizhiru/imouse-automation@main",
+    "https://cdn.jsdmirror.com/gh/qiguaizhiru/imouse-automation@main",
+    # GitHub raw 原生
     "https://raw.githubusercontent.com/qiguaizhiru/imouse-automation/main",
+    # GitHub 反代
+    "https://ghfast.top/https://raw.githubusercontent.com/qiguaizhiru/imouse-automation/main",
+    "https://ghproxy.com/https://raw.githubusercontent.com/qiguaizhiru/imouse-automation/main",
     "https://mirror.ghproxy.com/https://raw.githubusercontent.com/qiguaizhiru/imouse-automation/main",
 ]
 VIDEO_GRID = {1:(90,540),2:(255,540),3:(410,550),4:(90,760),5:(255,760),6:(410,760)}
@@ -2285,7 +2293,7 @@ class MyApp(QtWidgets.QMainWindow):
             remote_data = None
             for base_url in UPDATE_URLS:
                 try:
-                    r = _requests.get(f"{base_url}/version.json", timeout=15)
+                    r = _requests.get(f"{base_url}/version.json", timeout=8)
                     if r.status_code == 200:
                         remote_data = r.json()
                         self._debug_safe(f"  使用源: {base_url}")
