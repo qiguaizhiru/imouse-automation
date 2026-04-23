@@ -1,8 +1,8 @@
 {
   "pro": {
-    "version": "2.2.3",
-    "timestamp": "2026-04-23 16:34:32",
-    "changelog": "TikHub四层fallback V3-V2-V1-Web+unique_id直抓",
+    "version": "2.2.4",
+    "timestamp": "2026-04-23 16:41:28",
+    "changelog": "修复CDN缓存降级问题-版本号比较+多源取最新",
     "files": {
       "imouse6.16.py": "1",
       "tiktok_form.py": "1",
@@ -10,9 +10,9 @@
     }
   },
   "xp": {
-    "version": "2.2.3",
-    "timestamp": "2026-04-23 16:34:32",
-    "changelog": "TikHub四层fallback V3-V2-V1-Web+unique_id直抓",
+    "version": "2.2.4",
+    "timestamp": "2026-04-23 16:41:28",
+    "changelog": "修复CDN缓存降级问题-版本号比较+多源取最新",
     "files": {
       "imouse6.16_xp.py": "1",
       "tiktok_form.py": "1",

@@ -68,21 +68,35 @@ T_APP_LAUNCH = 6.0; T_PAGE_LOAD = 3.5; T_CLICK = 1.5; T_SWIPE = 2.0
 TIKTOK_SCHEME = "snssdk1233://"
 
 # ── 自动更新配置 ──
-LOCAL_VERSION = "2.2.3"
+LOCAL_VERSION = "2.2.4"
 UPDATE_CHANNEL = "xp"  # "pro" 或 "xp"
 UPDATE_URLS = [
-    # fastly jsDelivr 优先（cdn.jsdelivr.net 有顽固缓存问题）
+    # GitHub raw 原生（始终最新，无CDN缓存问题）
+    "https://raw.githubusercontent.com/qiguaizhiru/imouse-automation/main",
+    # GitHub 反代（国内快）
+    "https://ghfast.top/https://raw.githubusercontent.com/qiguaizhiru/imouse-automation/main",
+    # jsDelivr 备用（有CDN缓存但速度快）
     "https://fastly.jsdelivr.net/gh/qiguaizhiru/imouse-automation@main",
     "https://gcore.jsdelivr.net/gh/qiguaizhiru/imouse-automation@main",
     "https://cdn.jsdmirror.com/gh/qiguaizhiru/imouse-automation@main",
     "https://cdn.jsdelivr.net/gh/qiguaizhiru/imouse-automation@main",
-    # GitHub raw 原生
-    "https://raw.githubusercontent.com/qiguaizhiru/imouse-automation/main",
-    # GitHub 反代
-    "https://ghfast.top/https://raw.githubusercontent.com/qiguaizhiru/imouse-automation/main",
+    # 更多反代
     "https://ghproxy.com/https://raw.githubusercontent.com/qiguaizhiru/imouse-automation/main",
     "https://mirror.ghproxy.com/https://raw.githubusercontent.com/qiguaizhiru/imouse-automation/main",
 ]
+
+def _version_ge(v1, v2):
+    """比较版本号: v1 >= v2 返回 True"""
+    try:
+        t1 = tuple(int(x) for x in v1.split('.'))
+        t2 = tuple(int(x) for x in v2.split('.'))
+        # 补齐长度
+        maxlen = max(len(t1), len(t2))
+        t1 = t1 + (0,) * (maxlen - len(t1))
+        t2 = t2 + (0,) * (maxlen - len(t2))
+        return t1 >= t2
+    except Exception:
+        return v1 == v2
 VIDEO_GRID = {1:(90,540),2:(255,540),3:(410,550),4:(90,760),5:(255,760),6:(410,760)}
 PX = {"profile_tab":(450,1000),"three_dots":(463,829),"ad_auth_toggle":(444,351),
       "authorize":(250,990),"save":(250,990),"manage":(420,560),"copy_code":(255,886),
@@ -2467,20 +2481,32 @@ class MyApp(QtWidgets.QMainWindow):
     def _check_update_thread(self):
         import hashlib, subprocess
         try:
-            # 1. 获取远程 version.json (三层 fallback)
-            remote_data = None
+            # 1. 查询多个源的 version.json，取最新版本（避免CDN缓存降级）
+            best_remote = None
+            best_version = ""
+            best_url = ""
             for base_url in UPDATE_URLS:
                 try:
-                    r = _requests.get(f"{base_url}/version.json?t={int(time.time())}", timeout=8)
+                    r = _requests.get(f"{base_url}/version.json?t={int(time.time())}", timeout=6)
                     if r.status_code == 200:
-                        remote_data = r.json()
-                        self._debug_safe(f"  使用源: {base_url}")
-                        break
+                        data = r.json()
+                        v = data.get(UPDATE_CHANNEL, {}).get("version", "")
+                        if v and (not best_version or _version_ge(v, best_version)) and v != best_version:
+                            best_remote = data
+                            best_version = v
+                            best_url = base_url
+                        elif not best_remote and v:
+                            best_remote = data; best_version = v; best_url = base_url
+                        # GitHub raw 原生总是最新，拿到就停止查询
+                        if 'raw.githubusercontent' in base_url:
+                            break
                 except Exception as e:
-                    self._debug_safe(f"  源失败 {base_url}: {e}")
+                    self._debug_safe(f"  源失败 {base_url}: {str(e)[:80]}")
                     continue
-            if not remote_data:
+            if not best_remote:
                 self._debug_safe("检查更新失败: 所有源都无法访问"); return
+            self._debug_safe(f"  使用源: {best_url}")
+            remote_data = best_remote
 
             channel_data = remote_data.get(UPDATE_CHANNEL, {})
             remote_version = channel_data.get("version", "")
@@ -2494,12 +2520,12 @@ class MyApp(QtWidgets.QMainWindow):
             if changelog:
                 self._debug_safe(f"  更新说明: {changelog}")
 
-            # 2. 对比版本号
-            if remote_version == LOCAL_VERSION:
-                self._debug_safe(f"  已是最新版本 {remote_version}")
+            # 2. 对比版本号：本地 >= 远程 则不更新（防止CDN缓存旧version.json导致降级）
+            if _version_ge(LOCAL_VERSION, remote_version):
+                self._debug_safe(f"  本地 {LOCAL_VERSION} >= 远程 {remote_version}，无需更新")
                 self._signal_msgEvent.emit({
                     "fun": "_show_result_dialog", "status": 0,
-                    "title": "检查更新", "text": f"已是最新版本 {remote_version}"
+                    "title": "检查更新", "text": f"已是最新版本 {LOCAL_VERSION}（远程: {remote_version}）"
                 })
                 return
 
