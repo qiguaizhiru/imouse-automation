@@ -66,14 +66,14 @@ T_APP_LAUNCH = 6.0; T_PAGE_LOAD = 3.5; T_CLICK = 1.5; T_SWIPE = 2.0
 TIKTOK_SCHEME = "snssdk1233://"
 
 # ── 自动更新配置 ──
-LOCAL_VERSION = "2.2.1"
+LOCAL_VERSION = "2.2.2"
 UPDATE_CHANNEL = "pro"  # "pro" 或 "xp"
 UPDATE_URLS = [
-    # jsDelivr 4个镜像
-    "https://cdn.jsdelivr.net/gh/qiguaizhiru/imouse-automation@main",
+    # fastly jsDelivr 优先（cdn.jsdelivr.net 有顽固缓存问题）
     "https://fastly.jsdelivr.net/gh/qiguaizhiru/imouse-automation@main",
     "https://gcore.jsdelivr.net/gh/qiguaizhiru/imouse-automation@main",
     "https://cdn.jsdmirror.com/gh/qiguaizhiru/imouse-automation@main",
+    "https://cdn.jsdelivr.net/gh/qiguaizhiru/imouse-automation@main",
     # GitHub raw 原生
     "https://raw.githubusercontent.com/qiguaizhiru/imouse-automation/main",
     # GitHub 反代
@@ -925,9 +925,13 @@ class MyApp(QtWidgets.QMainWindow):
         self.__ui.button_clear_days.clicked.connect(self._clear_all_days)
         self.__ui.button_feishu_rate_by_name.clicked.connect(lambda: self._button_click('feishu_rate_by_name'))
         self.__ui.button_feishu_rate_by_group.clicked.connect(lambda: self._button_click('feishu_rate_by_group'))
-        self.__ui.button_test_completion_rate.clicked.connect(lambda: self._button_click('test_completion_rate'))
-        self.__ui.button_test_adcode.clicked.connect(lambda: self._button_click('test_adcode'))
-        self.__ui.button_test_stop.clicked.connect(self._test_stop)
+        # 测试Tab按钮（防御性绑定，避免 tiktok_form.py 未更新导致启动崩溃）
+        if hasattr(self.__ui, 'button_test_completion_rate'):
+            self.__ui.button_test_completion_rate.clicked.connect(lambda: self._button_click('test_completion_rate'))
+        if hasattr(self.__ui, 'button_test_adcode'):
+            self.__ui.button_test_adcode.clicked.connect(lambda: self._button_click('test_adcode'))
+        if hasattr(self.__ui, 'button_test_stop'):
+            self.__ui.button_test_stop.clicked.connect(self._test_stop)
         # 停止事件（测试功能共享）
         if not hasattr(self, '_test_stop_event'):
             self._test_stop_event = threading.Event()
@@ -2369,7 +2373,7 @@ class MyApp(QtWidgets.QMainWindow):
             remote_data = None
             for base_url in UPDATE_URLS:
                 try:
-                    r = _requests.get(f"{base_url}/version.json", timeout=8)
+                    r = _requests.get(f"{base_url}/version.json?t={int(time.time())}", timeout=8)
                     if r.status_code == 200:
                         remote_data = r.json()
                         self._debug_safe(f"  使用源: {base_url}")
@@ -2412,12 +2416,14 @@ class MyApp(QtWidgets.QMainWindow):
             os.makedirs(tmp_dir, exist_ok=True)
 
             download_ok = True
+            # 下载URL加 ?v=版本号 作为缓存破坏参数
+            _cache_buster = f"?v={remote_version}"
             for fn in changed:
                 self._debug_safe(f"  下载: {fn}")
                 downloaded = False
                 for base_url in UPDATE_URLS:
                     try:
-                        r = _requests.get(f"{base_url}/{fn}", timeout=60)
+                        r = _requests.get(f"{base_url}/{fn}{_cache_buster}", timeout=60)
                         if r.status_code == 200 and len(r.content) > 100:
                             # 确保子目录存在
                             out_path = os.path.join(tmp_dir, fn)
