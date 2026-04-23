@@ -1,8 +1,8 @@
 {
   "pro": {
-    "version": "2.2.7",
-    "timestamp": "2026-04-23 17:15:03",
-    "changelog": "日志加设备名前缀+测试并发防护",
+    "version": "2.2.8",
+    "timestamp": "2026-04-23 17:20:58",
+    "changelog": "滑动加step_sleep/steping/brake参数使其真正生效",
     "files": {
       "imouse6.16.py": "1",
       "tiktok_form.py": "1",
@@ -10,9 +10,9 @@
     }
   },
   "xp": {
-    "version": "2.2.7",
-    "timestamp": "2026-04-23 17:15:03",
-    "changelog": "日志加设备名前缀+测试并发防护",
+    "version": "2.2.8",
+    "timestamp": "2026-04-23 17:20:58",
+    "changelog": "滑动加step_sleep/steping/brake参数使其真正生效",
     "files": {
       "imouse6.16_xp.py": "1",
       "tiktok_form.py": "1",
