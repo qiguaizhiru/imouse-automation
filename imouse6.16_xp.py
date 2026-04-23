@@ -68,7 +68,7 @@ T_APP_LAUNCH = 6.0; T_PAGE_LOAD = 3.5; T_CLICK = 1.5; T_SWIPE = 2.0
 TIKTOK_SCHEME = "snssdk1233://"
 
 # ── 自动更新配置 ──
-LOCAL_VERSION = "2.3.0"
+LOCAL_VERSION = "2.3.1"
 UPDATE_CHANNEL = "xp"  # "pro" 或 "xp"
 UPDATE_URLS = [
     # GitHub raw 原生（始终最新，无CDN缓存问题）
@@ -666,18 +666,26 @@ def _do_ad_auth_flow(c,did,is_first=False,log_fn=None,stop_check=None,slow=False
     _log(f"    {_tag}[推流码] 步骤6: 复制推流码")
     click("copy_code",sleep=2.0)
     _log(f"    {_tag}[推流码] 步骤7: 读取剪贴板")
+    last_content = None
     for attempt in range(3):
         if _should_stop(): _log(f"    {_tag}[推流码] 收到停止信号，退出"); return None
         r=c.get_clipboard(did)
         if r:
             r=r.strip()
+            last_content = r
+            _log(f"    {_tag}[推流码] 剪贴板第{attempt+1}次内容(长度{len(r)}): {r!r}")
+            # 宽判: 以#开头 或 看起来像推流码(纯字母数字/符号且长度>5)
             if r.startswith("#"):
-                _log(f"    {_tag}[推流码] ✓ 剪贴板第{attempt+1}次读到: {r}")
+                _log(f"    {_tag}[推流码] ✓ 识别为推流码(#开头): {r}")
                 return r
-            _log(f"    {_tag}[推流码] 剪贴板第{attempt+1}次非推流码: {r[:50]}")
+            if len(r) > 5 and not r.startswith("http") and not any(c in r for c in [' ', '\n', '\t']):
+                _log(f"    {_tag}[推流码] ✓ 识别为推流码(非URL非空格): {r}")
+                return r
         else:
             _log(f"    {_tag}[推流码] 剪贴板第{attempt+1}次为空")
         time.sleep(2.0 * _sf)
+    if last_content:
+        _log(f"    {_tag}[推流码] 剪贴板最终内容: {last_content!r} (不符合推流码格式)")
     return None
 
 def _process_device_videos(c,feishu,did,remaining,video_nums=None,tikhub=None):
