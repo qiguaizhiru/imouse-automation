@@ -740,6 +740,38 @@ class Ui_MainWindow(object):
         tab5_layout.addStretch()
         self.tabWidget.addTab(self.tab_feishu_analytics, "\u98de\u4e66\u5b8c\u64ad\u7387")
 
+        # ── Tab 6: 测试 ──
+        self.tab_test = QtWidgets.QWidget()
+        tab6_layout = QtWidgets.QVBoxLayout(self.tab_test)
+        tab6_layout.setContentsMargins(12, 12, 12, 12)
+        tab6_layout.setSpacing(12)
+
+        test_group = QtWidgets.QGroupBox("测试完播率流程（不影响正式视频表）")
+        test_layout = QtWidgets.QVBoxLayout(test_group)
+
+        test_info = QtWidgets.QLabel(
+            "用途: 测试完播率抓取流程是否正常，不读取/写入正式视频表\n"
+            "输入: 测试表 tblkwoSrb1GkoM1J (view vew2Yve4BL)\n"
+            "输出: 完播率回写到同一张测试表的「T7 完播率」字段\n"
+            "流程: 按自定义名匹配设备 → 打开视频 → 拖拽白球读完播率 → 写回测试表")
+        test_info.setStyleSheet("color: #666; font-size: 11px; padding: 6px; background: #F5F5F5; border-radius: 4px;")
+        test_info.setWordWrap(True)
+        test_layout.addWidget(test_info)
+
+        test_btn_row = QtWidgets.QHBoxLayout()
+        self.button_test_completion_rate = QtWidgets.QPushButton("测试完播率")
+        self.button_test_completion_rate.setObjectName("button_test_completion_rate")
+        self.button_test_completion_rate.setStyleSheet(
+            "QPushButton { background-color: #E65100; color: white; font-weight: bold; "
+            "font-size: 14px; padding: 12px 24px; border: none; border-radius: 4px; }")
+        test_btn_row.addWidget(self.button_test_completion_rate)
+        test_btn_row.addStretch()
+        test_layout.addLayout(test_btn_row)
+
+        tab6_layout.addWidget(test_group)
+        tab6_layout.addStretch()
+        self.tabWidget.addTab(self.tab_test, "测试")
+
         right_panel.addWidget(self.tabWidget)
         main_layout.addLayout(right_panel, stretch=5)
 

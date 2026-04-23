@@ -44,6 +44,10 @@ ACCOUNT_VIEW_ID     = "vewlHYA0vk"
 # 视频表"账号编号"字段关联的是旧账号表，写视频时仍需用旧表的record_id
 OLD_ACCOUNT_TABLE_ID = "tblSQjP08dsoCoP9"
 OLD_ACCOUNT_FIELD_ACCOUNT_ID = "账号id"  # 旧表是小写id
+# 测试表（仅用于测试完播率流程，不影响正式表）
+TEST_APP_TOKEN      = "Vt8IbKPMAahSyhs2m6fcNxVWn1c"
+TEST_VIDEO_TABLE_ID = "tblkwoSrb1GkoM1J"
+TEST_VIDEO_VIEW_ID  = "vew2Yve4BL"
 VIDEO_TABLE_ID      = "tbld59fY7wCYtEsC"
 VIDEO_VIEW_ID       = "vew2Yve4BL"
 VIDEO_FIELDS = {
@@ -62,7 +66,7 @@ T_APP_LAUNCH = 6.0; T_PAGE_LOAD = 3.5; T_CLICK = 1.5; T_SWIPE = 2.0
 TIKTOK_SCHEME = "snssdk1233://"
 
 # ── 自动更新配置 ──
-LOCAL_VERSION = "2.1.7"
+LOCAL_VERSION = "2.1.8"
 UPDATE_CHANNEL = "pro"  # "pro" 或 "xp"
 UPDATE_URLS = [
     # jsDelivr 4个镜像
@@ -895,6 +899,7 @@ class MyApp(QtWidgets.QMainWindow):
         self.__ui.button_clear_days.clicked.connect(self._clear_all_days)
         self.__ui.button_feishu_rate_by_name.clicked.connect(lambda: self._button_click('feishu_rate_by_name'))
         self.__ui.button_feishu_rate_by_group.clicked.connect(lambda: self._button_click('feishu_rate_by_group'))
+        self.__ui.button_test_completion_rate.clicked.connect(lambda: self._button_click('test_completion_rate'))
         for btn in self.__ui.day_buttons:
             btn.clicked.connect(self._update_selected_dates_label)
         self._update_calendar()
@@ -1099,6 +1104,9 @@ class MyApp(QtWidgets.QMainWindow):
             return
         elif fun == 'feishu_rate_by_group':
             self._feishu_completion_rate(match_mode='username')
+            return
+        elif fun == 'test_completion_rate':
+            self._test_completion_rate()
             return
         elif fun == 'fetch_video_data':
             self._fetch_video_data()
@@ -3158,6 +3166,272 @@ class MyApp(QtWidgets.QMainWindow):
 
         except Exception as e:
             self._debug_safe(f"飞书完播率异常: {e}")
+            import traceback
+            self._debug_safe(traceback.format_exc())
+
+    # ═══════════════════════════ 测试完播率 (Tab6 测试) ═══════════════════════════
+
+    def _test_completion_rate(self):
+        """测试完播率: 读测试表 → 按自定义名匹配设备 → 抓完播率 → 写回测试表"""
+        if not HAS_REQUESTS:
+            self._debug("缺少 requests 模块"); return
+        if not self.device_list:
+            self._debug("没有设备，请先刷新设备列表"); return
+        online = {did: info for did, info in self.device_list.items()
+                  if info.get('state', 0) != 0}
+        if not online:
+            self._debug("没有在线设备"); return
+        self._debug(f"[测试] 开始测试完播率流程（使用测试表，不影响正式表）")
+        threading.Thread(target=self._test_completion_rate_thread,
+                         args=(online,), daemon=True).start()
+
+    def _test_completion_rate_thread(self, online_devices):
+        """测试完播率线程：从测试表读视频 → 抓完播率 → 写回测试表"""
+        try:
+            # 1. 从测试表读视频（测试表app_token不同）
+            self._debug_safe("[测试] 步骤1: 从测试表读取视频...")
+            test_fs = _FeishuClient(FEISHU_APP_ID, FEISHU_APP_SECRET, TEST_APP_TOKEN)
+            all_records = test_fs.search_records(TEST_VIDEO_TABLE_ID, view_id=TEST_VIDEO_VIEW_ID)
+            self._debug_safe(f"  测试表共 {len(all_records)} 条记录")
+
+            filtered = []
+            for rec in all_records:
+                f = rec.get("fields") or {}
+                link_val = f.get("视频发布链接")
+                link_url = ""
+                if isinstance(link_val, dict):
+                    link_url = link_val.get("link", "") or link_val.get("text", "")
+                elif isinstance(link_val, str):
+                    link_url = link_val
+                if not link_url: continue
+                # 从链接提取账号id (@xxx/video/...)
+                m = re.search(r'tiktok\.com/@([\w.]+)/', link_url)
+                acc_id = m.group(1) if m else ""
+                # 跳过已有完播率的
+                existing_rate = f.get("T7 完播率")
+                if existing_rate is not None and existing_rate != "":
+                    continue
+                filtered.append({
+                    "record_id": rec.get("record_id"),
+                    "account_id": acc_id,
+                    "link": link_url,
+                })
+            self._debug_safe(f"  待测试: {len(filtered)} 条（跳过已有完播率的）")
+            if not filtered:
+                self._debug_safe("[测试] 测试表没有需要抓的视频"); return
+
+            # 2. 按自定义名匹配设备
+            dev_map = {}
+            dev_map_lower = {}
+            for did, info in online_devices.items():
+                key = info.get('name', '').strip()
+                if key:
+                    dev_map[key] = did
+                    dev_map_lower[key.lower()] = did
+            self._debug_safe(f"  在线设备映射({len(dev_map)}台): {list(dev_map.keys())[:10]}...")
+
+            from collections import defaultdict
+            device_tasks = defaultdict(list)
+            unmatched = 0
+            for rec in filtered:
+                acc_id = rec["account_id"].strip()
+                _did = dev_map.get(acc_id) or dev_map_lower.get(acc_id.lower())
+                if _did:
+                    device_tasks[_did].append(rec)
+                else:
+                    unmatched += 1
+
+            matched_count = sum(len(v) for v in device_tasks.values())
+            self._debug_safe(f"  匹配成功: {matched_count} 条, 未匹配: {unmatched} 条")
+            for _did, _recs in device_tasks.items():
+                _dname = online_devices.get(_did, {}).get('name', _did)
+                self._debug_safe(f"    {_dname}: {len(_recs)} 个视频")
+            if not device_tasks:
+                self._debug_safe("[测试] 没有匹配到任何设备"); return
+
+            # 3. 抓完播率
+            self._debug_safe(f"[测试] 步骤2: 开始抓取完播率 ({len(device_tasks)} 台设备并发)...")
+            results_lock = threading.Lock()
+            results = {"success": [], "fail": []}
+
+            def _test_process_device(did, dev_recs):
+                dinfo = online_devices.get(did, {})
+                name = dinfo.get('name', did)
+                c = _IMouseProClient("127.0.0.1", IMOUSE_PRO_PORT)
+                self._debug_safe(f"  [{name}] 开始: {len(dev_recs)} 个视频")
+
+                for ti, rec in enumerate(dev_recs):
+                    link = rec["link"]
+                    record_id = rec["record_id"]
+                    self._debug_safe(f"  [{name}] {ti+1}/{len(dev_recs)}: 打开视频...")
+                    try:
+                        c.open_url(did, link)
+                        time.sleep(4)
+                        c.fix_landscape(did, log=self._debug_safe)
+                        _find_click_three_dots(c, did); time.sleep(1.5)
+
+                        # Analytics
+                        analytics_icon = _load_icon("icon/analytics.bmp")
+                        if not analytics_icon:
+                            with results_lock:
+                                results["fail"].append({"name": name, "link": link, "reason": "缺少analytics.bmp"})
+                            continue
+                        pos = c.find_image(did, analytics_icon, 0.75)
+                        if not pos:
+                            with results_lock:
+                                results["fail"].append({"name": name, "link": link, "reason": "未找到Analytics按钮"})
+                            continue
+                        c.tap(did, pos[0], pos[1]); time.sleep(2)
+                        c.swipe_vertical(did, 600, 300, x=200); time.sleep(1.5)
+
+                        # 找Traffic sources定位白球
+                        def _ocr_find_y(_c, _did):
+                            raw = _c.ocr(_did)
+                            if not raw: return None
+                            items = raw if isinstance(raw, list) else raw.get("texts", raw.get("result", []))
+                            for it in items:
+                                if not isinstance(it, dict): continue
+                                t = it.get("text", "")
+                                if "traffic" in t.lower() or "sources" in t.lower():
+                                    y = it.get("y") or it.get("top") or it.get("cy")
+                                    rect = it.get("rect") or it.get("box")
+                                    if y is None and isinstance(rect, (list, tuple)) and len(rect) >= 2:
+                                        y = rect[1]
+                                    if y and int(y) > 0: return int(y)
+                            return None
+
+                        ball_pos = None
+                        for _soff in [0, -100, 100]:
+                            if _soff != 0:
+                                c.swipe_vertical(did, 300 + _soff, 300, x=200); time.sleep(1)
+                            for _ in range(2):
+                                _ty = _ocr_find_y(c, did)
+                                if _ty:
+                                    ball_pos = (35, _ty - 90); break
+                                time.sleep(1)
+                            if ball_pos: break
+
+                        if not ball_pos:
+                            _ball_icon = _load_icon("icon/white_ball.bmp")
+                            if _ball_icon:
+                                for _sim in (0.65, 0.55, 0.45):
+                                    _bp = c.find_image(did, _ball_icon, _sim)
+                                    if _bp and 150 < _bp[1] < 800 and 10 < _bp[0] < 400:
+                                        ball_pos = _bp; break
+
+                        if not ball_pos:
+                            self._debug_safe(f"  [{name}] 未找到白球")
+                            with results_lock:
+                                results["fail"].append({"name": name, "link": link, "reason": "未找到球体"})
+                            continue
+
+                        # 拖拽+截图读完播率
+                        c.drag_to(did, ball_pos[0], ball_pos[1], 355, ball_pos[1])
+                        time.sleep(1.5)
+
+                        completion_rate = None
+                        try:
+                            import base64 as _b64
+                            from io import BytesIO
+                            from PIL import Image as _PIL, ImageEnhance as _IE
+                            ss = c._post("get_device_screenshot",
+                                         {"deviceid": did, "isJpg": True, "gzip": False, "original": False})
+                            if ss and ss.get("status") == 0:
+                                _d = ss.get("data", {})
+                                img_b64 = _d.get("img") or _d.get("screenshot")
+                                if img_b64:
+                                    full_img = _PIL.open(BytesIO(_b64.b64decode(img_b64))).convert("RGB")
+                                    _by = ball_pos[1]
+                                    crop = full_img.crop((0, max(0, _by-150), 330, min(full_img.height, _by+50)))
+                                    w, h = crop.size
+                                    crop = crop.resize((w*3, h*3), _PIL.LANCZOS).convert("L")
+                                    crop = _IE.Contrast(crop).enhance(3.0)
+                                    crop = _IE.Sharpness(crop).enhance(2.0)
+                                    try:
+                                        import pytesseract
+                                        import os as _os
+                                        for _tp in [r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+                                                    r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe"]:
+                                            if _os.path.exists(_tp):
+                                                pytesseract.pytesseract.tesseract_cmd = _tp; break
+                                        text = pytesseract.image_to_string(
+                                            crop, config="--psm 6 -c tessedit_char_whitelist=0123456789.%")
+                                        for _m in re.finditer(r'(\d*\.\d+)\s*%?', text):
+                                            val = float(_m.group(1))
+                                            if not (abs(val-50)<0.5 or abs(val-100)<0.5):
+                                                completion_rate = val; break
+                                    except: pass
+                        except Exception as e:
+                            self._debug_safe(f"  [{name}] 截图异常: {e}")
+
+                        c.mouse_release(did, 355, ball_pos[1])
+
+                        if completion_rate is not None:
+                            self._debug_safe(f"  [{name}] 完播率: {completion_rate}%")
+                            # 写回测试表
+                            try:
+                                resp = test_fs._s.post(
+                                    f"{test_fs.BASE_URL}/open-apis/bitable/v1/apps/{TEST_APP_TOKEN}/tables/{TEST_VIDEO_TABLE_ID}/records/batch_update",
+                                    headers=test_fs._headers(),
+                                    json={"records": [{"record_id": record_id, "fields": {"T7 完播率": completion_rate}}]},
+                                    timeout=30).json()
+                                if resp.get("code") == 0:
+                                    self._debug_safe(f"  [{name}] 测试表写入成功")
+                                else:
+                                    self._debug_safe(f"  [{name}] 测试表写入失败: code={resp.get('code')} msg={resp.get('msg')}")
+                            except Exception as e:
+                                self._debug_safe(f"  [{name}] 测试表写入异常: {e}")
+                            with results_lock:
+                                results["success"].append({"name": name, "link": link, "rate": completion_rate})
+                        else:
+                            self._debug_safe(f"  [{name}] 完播率读取失败")
+                            with results_lock:
+                                results["fail"].append({"name": name, "link": link, "reason": "OCR失败"})
+                    except Exception as e:
+                        self._debug_safe(f"  [{name}] 异常: {e}")
+                        with results_lock:
+                            results["fail"].append({"name": name, "link": link, "reason": str(e)})
+                return name
+
+            workers = min(4, len(device_tasks))
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                futs = {pool.submit(_test_process_device, did, recs): did
+                        for did, recs in device_tasks.items()}
+                for fut in as_completed(futs):
+                    try:
+                        name = fut.result()
+                        self._debug_safe(f"  设备 {name} 完成")
+                    except Exception as e:
+                        self._debug_safe(f"  设备异常: {e}")
+
+            # 弹窗
+            ts = matched_count
+            ok = len(results["success"])
+            fl = len(results["fail"])
+            lines = [
+                f"[测试完播率] 应抓: {ts}, 成功: {ok}, 失败: {fl}",
+                "",
+                f"测试表: {TEST_VIDEO_TABLE_ID}",
+                f"已把成功的完播率写入测试表的「T7 完播率」字段",
+            ]
+            if results["fail"]:
+                lines.append(""); lines.append("═══ 失败明细 ═══")
+                for r in results["fail"]:
+                    _ls = r['link'].split('/')[-1] if r['link'] else '-'
+                    lines.append(f"  {r['name']} → {r['reason']} ({_ls})")
+            if results["success"]:
+                lines.append(""); lines.append("═══ 成功明细 ═══")
+                for r in results["success"]:
+                    _ls = r['link'].split('/')[-1] if r['link'] else '-'
+                    lines.append(f"  {r['name']} → {r['rate']}% ({_ls})")
+
+            self._signal_msgEvent.emit({
+                "fun": "_show_result_dialog", "status": 0,
+                "title": f"测试完播率完成  ✓{ok}/{ts}",
+                "text": "\n".join(lines)
+            })
+        except Exception as e:
+            self._debug_safe(f"[测试] 异常: {e}")
             import traceback
             self._debug_safe(traceback.format_exc())
 
