@@ -68,7 +68,7 @@ T_APP_LAUNCH = 6.0; T_PAGE_LOAD = 3.5; T_CLICK = 1.5; T_SWIPE = 2.0
 TIKTOK_SCHEME = "snssdk1233://"
 
 # ── 自动更新配置 ──
-LOCAL_VERSION = "2.2.4"
+LOCAL_VERSION = "2.2.5"
 UPDATE_CHANNEL = "xp"  # "pro" 或 "xp"
 UPDATE_URLS = [
     # GitHub raw 原生（始终最新，无CDN缓存问题）
@@ -101,7 +101,7 @@ VIDEO_GRID = {1:(90,540),2:(255,540),3:(410,550),4:(90,760),5:(255,760),6:(410,7
 PX = {"profile_tab":(450,1000),"three_dots":(463,829),"ad_auth_toggle":(444,351),
       "authorize":(250,990),"save":(250,990),"manage":(420,560),"copy_code":(255,886),
       "back":(30,90),"allow_popup":(290,495),"always_allow":(191,719)}
-SWIPE_ROW_Y=960; SWIPE_START_X=485; SWIPE_END_X=8
+SWIPE_ROW_Y=965; SWIPE_START_X=485; SWIPE_END_X=8
 ICON_SIM=0.7; SKIP_POPUP_CHECK=True
 AD_ICON_FILE="ad_settings_icon.png"; AD_SEARCH_RECT=[[0,900],[0,1020],[500,900],[500,1020]]
 AD_FALLBACK_POSITIONS=[(280,957),(280,957)]
