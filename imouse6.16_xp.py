@@ -68,7 +68,7 @@ T_APP_LAUNCH = 6.0; T_PAGE_LOAD = 3.5; T_CLICK = 1.5; T_SWIPE = 2.0
 TIKTOK_SCHEME = "snssdk1233://"
 
 # ── 自动更新配置 ──
-LOCAL_VERSION = "2.2.9"
+LOCAL_VERSION = "2.3.0"
 UPDATE_CHANNEL = "xp"  # "pro" 或 "xp"
 UPDATE_URLS = [
     # GitHub raw 原生（始终最新，无CDN缓存问题）
@@ -138,9 +138,10 @@ class _IMouseXPClient:
     def tap(self, did, x, y):
         return self._post("/mouse/click",{"id":did,"button":1,"x":x,"y":y,"time":0})
     def swipe(self, did, sx, sy, ex, ey):
-        return self._post("/mouse/swipe",{"id":did,"direction":"left" if ex-sx<0 else "right","button":1,
-                                    "len":0.9,"sx":sx,"sy":sy,"ex":ex,"ey":ey,
-                                    "step_sleep":1,"steping":"1","brake":True})
+        # 参照开发者工具实测: direction=right, 不传len, step_sleep=0, brake=False
+        return self._post("/mouse/swipe",{"id":did,"direction":"right","button":1,
+                                    "sx":sx,"sy":sy,"ex":ex,"ey":ey,
+                                    "step_sleep":0})
     def press_home(self, did):
         return self._post("/key/sendkey",{"id":did,"key":"","fn_key":"WIN+h"})
     def open_url(self, did, url):
@@ -210,8 +211,8 @@ class _IMouseXPClient:
         """垂直滑动"""
         direction = "up" if end_y < start_y else "down"
         return self._post("/mouse/swipe",{"id":did,"direction":direction,"button":1,
-                                    "len":0.5,"sx":x,"sy":start_y,"ex":x,"ey":end_y,
-                                    "step_sleep":1,"steping":"1","brake":True})
+                                    "sx":x,"sy":start_y,"ex":x,"ey":end_y,
+                                    "step_sleep":0})
     def fix_landscape(self, did, log=None):
         """检测横屏并点击(834,39)返回个人页，返回True表示触发了横屏修正"""
         try:
