@@ -66,7 +66,7 @@ T_APP_LAUNCH = 6.0; T_PAGE_LOAD = 3.5; T_CLICK = 1.5; T_SWIPE = 2.0
 TIKTOK_SCHEME = "snssdk1233://"
 
 # ── 自动更新配置 ──
-LOCAL_VERSION = "2.1.9"
+LOCAL_VERSION = "2.2.0"
 UPDATE_CHANNEL = "pro"  # "pro" 或 "xp"
 UPDATE_URLS = [
     # jsDelivr 4个镜像
@@ -254,13 +254,17 @@ class _TikHubClient:
         self._s=_requests.Session()
         self._s.headers.update({"Authorization":f"Bearer {TIKHUB_TOKEN}","accept":"application/json"})
     def _get(self, ep, params):
+        """优化策略: 200立即返回, 400业务失败直接放弃让fallback接手, 429/网络异常才重试"""
         for i in range(3):
             try:
-                r=self._s.get(f"{TIKHUB_BASE_URL}{ep}",params=params,timeout=30)
+                r=self._s.get(f"{TIKHUB_BASE_URL}{ep}",params=params,timeout=20)
                 if r.status_code==200: return r.json()
-                if r.status_code==429: time.sleep(5*(i+1)); continue
-            except: pass
-            time.sleep(2**i)
+                if r.status_code==400: return None  # 业务失败，立即让上层 fallback
+                if r.status_code==429: time.sleep(3); continue  # 限流，短等待
+                if r.status_code>=500: time.sleep(1); continue  # 服务端错误，短等待
+                return None  # 其他状态码不重试
+            except Exception:
+                if i<2: time.sleep(1)  # 网络异常，短等待重试
         return None
     def fetch_user_info(self, uid):
         """获取 secUid: 先 app/v3，失败 fallback web"""
@@ -574,14 +578,14 @@ def run_adcode_full(phase="all", port=9912, workers=20, days=1, videos_str="", m
 
         def _fetch_one_account(acc):
             uid=acc["unique_id"]
-            MAX_RETRIES=3
+            MAX_RETRIES=2
             for attempt in range(1, MAX_RETRIES+1):
                 try:
                     th=_TikHubClient()
                     ui=th.fetch_user_info(uid)
                     if not ui:
-                        log_fn(f"  {uid}: 获取用户信息失败 (第{attempt}次)")
-                        if attempt<MAX_RETRIES: time.sleep(3); continue
+                        if attempt<MAX_RETRIES: time.sleep(1); continue
+                        log_fn(f"  {uid}: 获取用户信息失败")
                         return uid, []
                     vids=th.fetch_user_videos(ui["sec_uid"],30,pub_after)
                     non_pinned=[v for v in vids if not v.get("is_pinned")]
@@ -589,11 +593,11 @@ def run_adcode_full(phase="all", port=9912, workers=20, days=1, videos_str="", m
                     return uid, non_pinned
                 except Exception as e:
                     log_fn(f"  {uid}: 第{attempt}次异常: {e}")
-                    if attempt<MAX_RETRIES: time.sleep(3)
+                    if attempt<MAX_RETRIES: time.sleep(1)
             return uid, []
 
-        log_fn(f"  并发拉取 {len(accounts)} 个账号视频 (5并发, 3次重试)...")
-        with ThreadPoolExecutor(max_workers=5) as pool:
+        log_fn(f"  并发拉取 {len(accounts)} 个账号视频 (10并发, 2次重试)...")
+        with ThreadPoolExecutor(max_workers=10) as pool:
             futures={pool.submit(_fetch_one_account, acc): acc for acc in accounts}
             for fut in as_completed(futures):
                 uid, vids = fut.result()
@@ -1987,12 +1991,12 @@ class MyApp(QtWidgets.QMainWindow):
 
             def _fetch_one(acc):
                 uid = acc["unique_id"]
-                for attempt in range(1, 4):
+                for attempt in range(1, 3):
                     try:
                         th = _TikHubClient()
                         ui = th.fetch_user_info(uid)
                         if not ui:
-                            if attempt < 3: time.sleep(3); continue
+                            if attempt < 2: time.sleep(1); continue
                             return uid, []
                         vids = th.fetch_user_videos(ui["sec_uid"], 30, pub_after)
                         # 过滤选定日期
@@ -2008,12 +2012,12 @@ class MyApp(QtWidgets.QMainWindow):
                         return uid, filtered
                     except Exception as e:
                         self._debug_safe(f"  {uid}: 第{attempt}次异常: {e}")
-                        if attempt < 3: time.sleep(3)
+                        if attempt < 2: time.sleep(1)
                 return uid, []
 
-            self._debug_safe(f"  并发拉取 {len(accounts)} 个账号...")
+            self._debug_safe(f"  并发拉取 {len(accounts)} 个账号 (10并发)...")
             video_data = {}
-            with ThreadPoolExecutor(max_workers=5) as pool:
+            with ThreadPoolExecutor(max_workers=10) as pool:
                 futs = {pool.submit(_fetch_one, acc): acc for acc in accounts}
                 for fut in as_completed(futs):
                     uid, vids = fut.result()

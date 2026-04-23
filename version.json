@@ -1,8 +1,8 @@
 {
   "pro": {
-    "version": "2.1.9",
-    "timestamp": "2026-04-23 15:41:53",
-    "changelog": "新增测试抓取推流码按钮",
+    "version": "2.2.0",
+    "timestamp": "2026-04-23 16:12:18",
+    "changelog": "优化TikHub并发10+2重试，400直接fallback",
     "files": {
       "imouse6.16.py": "1",
       "tiktok_form.py": "1",
@@ -10,9 +10,9 @@
     }
   },
   "xp": {
-    "version": "2.1.9",
-    "timestamp": "2026-04-23 15:41:53",
-    "changelog": "新增测试抓取推流码按钮",
+    "version": "2.2.0",
+    "timestamp": "2026-04-23 16:12:18",
+    "changelog": "优化TikHub并发10+2重试，400直接fallback",
     "files": {
       "imouse6.16_xp.py": "1",
       "tiktok_form.py": "1",
