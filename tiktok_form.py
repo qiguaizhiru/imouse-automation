@@ -765,8 +765,23 @@ class Ui_MainWindow(object):
             "QPushButton { background-color: #E65100; color: white; font-weight: bold; "
             "font-size: 14px; padding: 12px 24px; border: none; border-radius: 4px; }")
         test_btn_row.addWidget(self.button_test_completion_rate)
+
+        self.button_test_adcode = QtWidgets.QPushButton("测试抓取推流码")
+        self.button_test_adcode.setObjectName("button_test_adcode")
+        self.button_test_adcode.setStyleSheet(
+            "QPushButton { background-color: #6A1B9A; color: white; font-weight: bold; "
+            "font-size: 14px; padding: 12px 24px; border: none; border-radius: 4px; }")
+        test_btn_row.addWidget(self.button_test_adcode)
         test_btn_row.addStretch()
         test_layout.addLayout(test_btn_row)
+
+        test_adcode_note = QtWidgets.QLabel(
+            "「测试抓取推流码」: 不读表、不匹配，对所有在线设备直接执行抓取步骤\n"
+            "（点三个点 → 滑动 → 点Ad settings → 授权 → 复制推流码 → 读剪贴板）\n"
+            "需要手机当前已打开一个TikTok视频")
+        test_adcode_note.setStyleSheet("color: #666; font-size: 11px; padding: 6px; background: #F5F5F5; border-radius: 4px;")
+        test_adcode_note.setWordWrap(True)
+        test_layout.addWidget(test_adcode_note)
 
         tab6_layout.addWidget(test_group)
         tab6_layout.addStretch()

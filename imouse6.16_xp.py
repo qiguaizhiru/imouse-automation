@@ -68,7 +68,7 @@ T_APP_LAUNCH = 6.0; T_PAGE_LOAD = 3.5; T_CLICK = 1.5; T_SWIPE = 2.0
 TIKTOK_SCHEME = "snssdk1233://"
 
 # ── 自动更新配置 ──
-LOCAL_VERSION = "2.1.8"
+LOCAL_VERSION = "2.1.9"
 UPDATE_CHANNEL = "xp"  # "pro" 或 "xp"
 UPDATE_URLS = [
     # jsDelivr 4个镜像
@@ -928,6 +928,7 @@ class MyApp(QtWidgets.QMainWindow):
         self.__ui.button_feishu_rate_by_name.clicked.connect(lambda: self._button_click('feishu_rate_by_name'))
         self.__ui.button_feishu_rate_by_group.clicked.connect(lambda: self._button_click('feishu_rate_by_group'))
         self.__ui.button_test_completion_rate.clicked.connect(lambda: self._button_click('test_completion_rate'))
+        self.__ui.button_test_adcode.clicked.connect(lambda: self._button_click('test_adcode'))
         for btn in self.__ui.day_buttons:
             btn.clicked.connect(self._update_selected_dates_label)
         self._update_calendar()
@@ -1135,6 +1136,9 @@ class MyApp(QtWidgets.QMainWindow):
             return
         elif fun == 'test_completion_rate':
             self._test_completion_rate()
+            return
+        elif fun == 'test_adcode':
+            self._test_adcode()
             return
         elif fun == 'fetch_video_data':
             self._fetch_video_data()
@@ -3504,6 +3508,86 @@ class MyApp(QtWidgets.QMainWindow):
             })
         except Exception as e:
             self._debug_safe(f"[测试] 异常: {e}")
+            import traceback
+            self._debug_safe(traceback.format_exc())
+
+    # ═══════════════════════════ 测试抓取推流码 ═══════════════════════════
+
+    def _test_adcode(self):
+        """测试抓取推流码：不读表、不匹配，对所有在线设备直接执行抓取流程"""
+        if not self.device_list:
+            self._debug("没有设备，请先刷新设备列表"); return
+        online = {did: info for did, info in self.device_list.items()
+                  if info.get('state', 0) != 0}
+        if not online:
+            self._debug("没有在线设备"); return
+        self._debug(f"[测试推流码] 对 {len(online)} 台在线设备直接执行抓取流程...")
+        self._debug(f"[测试推流码] 前提: 手机当前已打开TikTok视频")
+        threading.Thread(target=self._test_adcode_thread, args=(online,), daemon=True).start()
+
+    def _test_adcode_thread(self, online_devices):
+        """测试推流码抓取线程"""
+        try:
+            results_lock = threading.Lock()
+            results = {"success": [], "fail": []}
+
+            def _process_one(did, info):
+                name = info.get('name', did)
+                c = _IMouseXPClient("127.0.0.1", IMOUSE_XP_PORT)
+                self._debug_safe(f"  [{name}] 开始推流码抓取流程")
+                try:
+                    # 横屏检测
+                    c.fix_landscape(did, log=self._debug_safe)
+                    # 跑完整推流码抓取流程（点三个点→滑动→Ad settings→授权→复制）
+                    ad_code = _do_ad_auth_flow(c, did, is_first=False, log_fn=self._debug_safe)
+                    if ad_code:
+                        self._debug_safe(f"  [{name}] ✓ 推流码: {ad_code}")
+                        with results_lock:
+                            results["success"].append({"name": name, "code": ad_code})
+                    else:
+                        self._debug_safe(f"  [{name}] ✗ 未获取到推流码")
+                        with results_lock:
+                            results["fail"].append({"name": name, "reason": "流程走完但剪贴板没读到推流码"})
+                except Exception as e:
+                    self._debug_safe(f"  [{name}] 异常: {e}")
+                    with results_lock:
+                        results["fail"].append({"name": name, "reason": str(e)})
+                return name
+
+            workers = min(4, len(online_devices))
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                futs = {pool.submit(_process_one, did, info): did
+                        for did, info in online_devices.items()}
+                for fut in as_completed(futs):
+                    try:
+                        name = fut.result()
+                        self._debug_safe(f"  设备 {name} 完成")
+                    except Exception as e:
+                        self._debug_safe(f"  设备异常: {e}")
+
+            # 弹窗
+            ok = len(results["success"])
+            fl = len(results["fail"])
+            total = ok + fl
+            lines = [
+                f"[测试推流码] 在线设备: {total}, 成功: {ok}, 失败: {fl}",
+            ]
+            if results["success"]:
+                lines.append(""); lines.append("═══ 成功明细 ═══")
+                for r in results["success"]:
+                    lines.append(f"  {r['name']} → {r['code']}")
+            if results["fail"]:
+                lines.append(""); lines.append("═══ 失败明细 ═══")
+                for r in results["fail"]:
+                    lines.append(f"  {r['name']} → {r['reason']}")
+
+            self._signal_msgEvent.emit({
+                "fun": "_show_result_dialog", "status": 0,
+                "title": f"测试推流码完成  ✓{ok}/{total}",
+                "text": "\n".join(lines)
+            })
+        except Exception as e:
+            self._debug_safe(f"[测试推流码] 异常: {e}")
             import traceback
             self._debug_safe(traceback.format_exc())
 
