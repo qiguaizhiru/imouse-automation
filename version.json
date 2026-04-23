@@ -1,8 +1,8 @@
 {
   "pro": {
-    "version": "2.2.2",
-    "timestamp": "2026-04-23 16:27:17",
-    "changelog": "防御启动崩溃+换源顺序+URL缓存破坏",
+    "version": "2.2.3",
+    "timestamp": "2026-04-23 16:34:32",
+    "changelog": "TikHub四层fallback V3-V2-V1-Web+unique_id直抓",
     "files": {
       "imouse6.16.py": "1",
       "tiktok_form.py": "1",
@@ -10,9 +10,9 @@
     }
   },
   "xp": {
-    "version": "2.2.2",
-    "timestamp": "2026-04-23 16:27:17",
-    "changelog": "防御启动崩溃+换源顺序+URL缓存破坏",
+    "version": "2.2.3",
+    "timestamp": "2026-04-23 16:34:32",
+    "changelog": "TikHub四层fallback V3-V2-V1-Web+unique_id直抓",
     "files": {
       "imouse6.16_xp.py": "1",
       "tiktok_form.py": "1",

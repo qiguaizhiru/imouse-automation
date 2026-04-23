@@ -68,7 +68,7 @@ T_APP_LAUNCH = 6.0; T_PAGE_LOAD = 3.5; T_CLICK = 1.5; T_SWIPE = 2.0
 TIKTOK_SCHEME = "snssdk1233://"
 
 # ── 自动更新配置 ──
-LOCAL_VERSION = "2.2.2"
+LOCAL_VERSION = "2.2.3"
 UPDATE_CHANNEL = "xp"  # "pro" 或 "xp"
 UPDATE_URLS = [
     # fastly jsDelivr 优先（cdn.jsdelivr.net 有顽固缓存问题）
@@ -309,19 +309,40 @@ class _TikHubClient:
             sec=user.get("secUid","")
             if sec: return {"sec_uid":sec,"source":"web"}
         return None
-    def fetch_user_videos(self, sec_uid, max_count=30, publish_after=None):
-        """获取用户视频: 先 app/v3，失败 fallback web"""
-        videos=self._fetch_videos_appv3(sec_uid, max_count, publish_after)
+    def fetch_user_videos(self, sec_uid, max_count=30, publish_after=None, unique_id=None):
+        """获取用户视频: V3 → V2 → V1 → Web 四层 fallback
+
+        前三个 app/v3 接口优先用 unique_id（省一次 sec_uid 查询）
+        """
+        # 1) V3 (最快)
+        videos = self._fetch_videos_appv3(sec_uid, max_count, publish_after, ep="fetch_user_post_videos_v3", unique_id=unique_id)
         if videos: return videos
+        # 2) V2
+        videos = self._fetch_videos_appv3(sec_uid, max_count, publish_after, ep="fetch_user_post_videos_v2", unique_id=unique_id)
+        if videos: return videos
+        # 3) V1
+        videos = self._fetch_videos_appv3(sec_uid, max_count, publish_after, ep="fetch_user_post_videos", unique_id=unique_id)
+        if videos: return videos
+        # 4) Web (需要 sec_uid)
+        if not sec_uid: return []
         return self._fetch_videos_web(sec_uid, max_count, publish_after)
-    def _fetch_videos_appv3(self, sec_uid, max_count, publish_after):
+    def _fetch_videos_appv3(self, sec_uid, max_count, publish_after, ep="fetch_user_post_videos_v3", unique_id=None):
+        """V1/V2/V3 通用: 优先用 unique_id, 没有就用 sec_user_id"""
         videos=[]; cursor=0
         while len(videos)<max_count:
-            d=self._get("/api/v1/tiktok/app/v3/fetch_user_post_videos_v3",
-                        {"sec_user_id":sec_uid,"count":min(30,max_count-len(videos)),"max_cursor":cursor,"sort_type":0})
+            params = {"count": min(30, max_count-len(videos)), "max_cursor": cursor, "sort_type": 0}
+            if unique_id:
+                params["unique_id"] = unique_id
+            elif sec_uid:
+                params["sec_user_id"] = sec_uid
+            else:
+                return []
+            d=self._get(f"/api/v1/tiktok/app/v3/{ep}", params)
             if not d: return []
             inner=d.get("data",{})
-            for a in (inner.get("aweme_list") or []):
+            aweme_list = inner.get("aweme_list") or []
+            if not aweme_list and cursor == 0: return []  # 第一页空，直接返回
+            for a in aweme_list:
                 aid=str(a.get("aweme_id") or a.get("id") or "")
                 if not aid: continue
                 ct=int(a.get("create_time") or 0)
@@ -333,7 +354,7 @@ class _TikHubClient:
                     "share_url":a.get("share_url") or si.get("share_url") or "",
                     "is_pinned":bool(a.get("is_top"))})
             if not inner.get("has_more"): break
-            cursor=inner.get("max_cursor",0); time.sleep(1)
+            cursor=inner.get("max_cursor",0); time.sleep(0.5)
         return videos
     def _fetch_videos_web(self, sec_uid, max_count, publish_after):
         videos=[]; cursor=0
@@ -342,7 +363,9 @@ class _TikHubClient:
                         {"secUid":sec_uid,"count":min(20,max_count-len(videos)),"cursor":cursor})
             if not d: return []
             inner=d.get("data",{})
-            for a in (inner.get("itemList") or inner.get("items") or []):
+            items = inner.get("itemList") or inner.get("items") or []
+            if not items and cursor == 0: return []
+            for a in items:
                 aid=str(a.get("id") or a.get("aweme_id") or "")
                 if not aid: continue
                 ct=int(a.get("createTime") or 0)
@@ -354,7 +377,7 @@ class _TikHubClient:
                     "share_url":f"https://www.tiktok.com/@{a.get('author',{}).get('uniqueId','')}/video/{aid}",
                     "is_pinned":bool(a.get("isPinnedItem") or a.get("is_top"))})
             if not inner.get("hasMore"): break
-            cursor=inner.get("cursor",0); time.sleep(1)
+            cursor=inner.get("cursor",0); time.sleep(0.5)
         return videos
     def resolve_share_url(self, url):
         m=re.search(r'/video/(\d+)',url)
@@ -632,12 +655,13 @@ def run_adcode_full(phase="all", port=9911, workers=20, days=1, videos_str="", m
             for attempt in range(1, MAX_RETRIES+1):
                 try:
                     th=_TikHubClient()
-                    ui=th.fetch_user_info(uid)
-                    if not ui:
-                        if attempt<MAX_RETRIES: time.sleep(1); continue
-                        log_fn(f"  {uid}: 获取用户信息失败")
-                        return uid, []
-                    vids=th.fetch_user_videos(ui["sec_uid"],30,pub_after)
+                    # 直接用 unique_id 调 app/v3 (V3→V2→V1)；失败时查 sec_uid 再用 web
+                    vids=th.fetch_user_videos(None, 30, pub_after, unique_id=uid)
+                    if not vids:
+                        # fallback: 查 sec_uid 再用 web
+                        ui=th.fetch_user_info(uid)
+                        if ui:
+                            vids=th.fetch_user_videos(ui["sec_uid"], 30, pub_after)
                     non_pinned=[v for v in vids if not v.get("is_pinned")]
                     log_fn(f"  {uid}: {len(non_pinned)} 个视频")
                     return uid, non_pinned
@@ -2096,11 +2120,13 @@ class MyApp(QtWidgets.QMainWindow):
                 for attempt in range(1, 3):
                     try:
                         th = _TikHubClient()
-                        ui = th.fetch_user_info(uid)
-                        if not ui:
-                            if attempt < 2: time.sleep(1); continue
-                            return uid, []
-                        vids = th.fetch_user_videos(ui["sec_uid"], 30, pub_after)
+                        # 直接用 unique_id 调 app/v3 V3→V2→V1
+                        vids = th.fetch_user_videos(None, 30, pub_after, unique_id=uid)
+                        if not vids:
+                            # fallback: 查 sec_uid 再用 web
+                            ui = th.fetch_user_info(uid)
+                            if ui:
+                                vids = th.fetch_user_videos(ui["sec_uid"], 30, pub_after)
                         # 过滤选定日期
                         filtered = []
                         for v in vids:
