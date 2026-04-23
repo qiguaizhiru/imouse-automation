@@ -772,6 +772,13 @@ class Ui_MainWindow(object):
             "QPushButton { background-color: #6A1B9A; color: white; font-weight: bold; "
             "font-size: 14px; padding: 12px 24px; border: none; border-radius: 4px; }")
         test_btn_row.addWidget(self.button_test_adcode)
+
+        self.button_test_stop = QtWidgets.QPushButton("⏹ 停止测试")
+        self.button_test_stop.setObjectName("button_test_stop")
+        self.button_test_stop.setStyleSheet(
+            "QPushButton { background-color: #D32F2F; color: white; font-weight: bold; "
+            "font-size: 14px; padding: 12px 24px; border: none; border-radius: 4px; }")
+        test_btn_row.addWidget(self.button_test_stop)
         test_btn_row.addStretch()
         test_layout.addLayout(test_btn_row)
 

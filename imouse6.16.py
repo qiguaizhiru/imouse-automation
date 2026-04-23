@@ -66,7 +66,7 @@ T_APP_LAUNCH = 6.0; T_PAGE_LOAD = 3.5; T_CLICK = 1.5; T_SWIPE = 2.0
 TIKTOK_SCHEME = "snssdk1233://"
 
 # ── 自动更新配置 ──
-LOCAL_VERSION = "2.2.0"
+LOCAL_VERSION = "2.2.1"
 UPDATE_CHANNEL = "pro"  # "pro" 或 "xp"
 UPDATE_URLS = [
     # jsDelivr 4个镜像
@@ -463,21 +463,29 @@ def _match_video(share_url, videos, tikhub=None):
                 if v.get("aweme_id")==aid: return v
     return None
 
-def _do_ad_auth_flow(c,did,is_first=False,log_fn=None):
+def _do_ad_auth_flow(c,did,is_first=False,log_fn=None,stop_check=None,slow=False):
+    """slow=True: 测试模式，每步加更长等待便于观察"""
     def _log(msg):
         if log_fn: log_fn(msg)
+    def _should_stop():
+        return stop_check and stop_check()
     def click(name,sleep=T_CLICK):
-        x,y=PX[name]; _log(f"    点击 {name} ({x},{y})"); c.tap(did,x,y); time.sleep(sleep)
+        x,y=PX[name]; _log(f"    点击 {name} ({x},{y})"); c.tap(did,x,y); time.sleep(sleep + (1.5 if slow else 0))
+    # 测试模式下所有 sleep 都加长
+    _sf = 2.0 if slow else 1.0
+    if _should_stop(): _log("    [推流码] 收到停止信号，退出"); return None
     _log(f"    [推流码] 步骤1: 点三个点")
-    _find_click_three_dots(c,did); time.sleep(1.0)
-    # 检测弹窗
+    _find_click_three_dots(c,did); time.sleep(1.0 * _sf)
+    if _should_stop(): _log("    [推流码] 收到停止信号，退出"); return None
     _log(f"    [推流码] 步骤2: 检测弹窗")
     _dismiss_popup(c, did)
-    time.sleep(1.0)
+    time.sleep(1.0 * _sf)
+    if _should_stop(): _log("    [推流码] 收到停止信号，退出"); return None
     _log(f"    [推流码] 步骤3: 滑动 ({SWIPE_START_X},{SWIPE_ROW_Y}) -> ({SWIPE_END_X},{SWIPE_ROW_Y})")
     r_swipe = c.swipe(did,SWIPE_START_X,SWIPE_ROW_Y,SWIPE_END_X,SWIPE_ROW_Y)
     _log(f"    [推流码] 滑动结果: {r_swipe}")
-    time.sleep(T_SWIPE)
+    time.sleep(T_SWIPE * _sf)
+    if _should_stop(): _log("    [推流码] 收到停止信号，退出"); return None
     # Ad settings
     _log(f"    [推流码] 步骤4: 找 Ad settings")
     ib=_load_icon(AD_ICON_FILE)
@@ -492,25 +500,39 @@ def _do_ad_auth_flow(c,did,is_first=False,log_fn=None):
     else:
         _log(f"    [推流码] 图标文件 {AD_ICON_FILE} 不存在，用兜底坐标 {AD_FALLBACK_POSITIONS[0]}")
         c.tap(did,AD_FALLBACK_POSITIONS[0][0],AD_FALLBACK_POSITIONS[0][1])
-    time.sleep(10.0 if is_first else 4.5)
+    _wait_after_adsettings = (10.0 if is_first else 4.5) * (1.5 if slow else 1.0)
+    _log(f"    [推流码] 等待 Ad settings 加载 {_wait_after_adsettings}s")
+    time.sleep(_wait_after_adsettings)
+    if _should_stop(): _log("    [推流码] 收到停止信号，退出"); return None
     # Check toggle
+    _log(f"    [推流码] 步骤5: 检测授权开关")
     already_on=False
     ib2=_load_icon(AD_AUTH_ON_ICON_FILE)
     if ib2:
         r=c.find_image(did,ib2,AD_AUTH_ON_ICON_SIM,AD_AUTH_ON_SEARCH_RECT)
         if r: already_on=True
+    _log(f"    [推流码] 授权开关已开: {already_on}")
     if already_on:
         click("manage",sleep=4.0)
     else:
         click("ad_auth_toggle",sleep=1.0); click("authorize"); click("save",sleep=2.0)
-        time.sleep(5); click("manage",sleep=4.0)
+        time.sleep(5 * _sf); click("manage",sleep=4.0)
+    if _should_stop(): _log("    [推流码] 收到停止信号，退出"); return None
+    _log(f"    [推流码] 步骤6: 复制推流码")
     click("copy_code",sleep=2.0)
+    _log(f"    [推流码] 步骤7: 读取剪贴板")
     for attempt in range(3):
+        if _should_stop(): _log("    [推流码] 收到停止信号，退出"); return None
         r=c.get_clipboard(did)
         if r:
             r=r.strip()
-            if r.startswith("#"): return r
-        time.sleep(2.0)
+            if r.startswith("#"):
+                _log(f"    [推流码] ✓ 剪贴板第{attempt+1}次读到: {r}")
+                return r
+            _log(f"    [推流码] 剪贴板第{attempt+1}次非推流码: {r[:50]}")
+        else:
+            _log(f"    [推流码] 剪贴板第{attempt+1}次为空")
+        time.sleep(2.0 * _sf)
     return None
 
 def _process_device_videos(c,feishu,did,remaining,video_nums=None,tikhub=None):
@@ -905,6 +927,10 @@ class MyApp(QtWidgets.QMainWindow):
         self.__ui.button_feishu_rate_by_group.clicked.connect(lambda: self._button_click('feishu_rate_by_group'))
         self.__ui.button_test_completion_rate.clicked.connect(lambda: self._button_click('test_completion_rate'))
         self.__ui.button_test_adcode.clicked.connect(lambda: self._button_click('test_adcode'))
+        self.__ui.button_test_stop.clicked.connect(self._test_stop)
+        # 停止事件（测试功能共享）
+        if not hasattr(self, '_test_stop_event'):
+            self._test_stop_event = threading.Event()
         for btn in self.__ui.day_buttons:
             btn.clicked.connect(self._update_selected_dates_label)
         self._update_calendar()
@@ -3189,7 +3215,9 @@ class MyApp(QtWidgets.QMainWindow):
                   if info.get('state', 0) != 0}
         if not online:
             self._debug("没有在线设备"); return
+        self._test_stop_event.clear()
         self._debug(f"[测试] 开始测试完播率流程（使用测试表，不影响正式表）")
+        self._debug(f"[测试] 点 ⏹ 停止测试 可中止")
         threading.Thread(target=self._test_completion_rate_thread,
                          args=(online,), daemon=True).start()
 
@@ -3269,6 +3297,8 @@ class MyApp(QtWidgets.QMainWindow):
                 self._debug_safe(f"  [{name}] 开始: {len(dev_recs)} 个视频")
 
                 for ti, rec in enumerate(dev_recs):
+                    if self._test_stop_event.is_set():
+                        self._debug_safe(f"  [{name}] 收到停止信号，退出"); return name
                     link = rec["link"]
                     record_id = rec["record_id"]
                     self._debug_safe(f"  [{name}] {ti+1}/{len(dev_recs)}: 打开视频...")
@@ -3442,8 +3472,18 @@ class MyApp(QtWidgets.QMainWindow):
             self._debug_safe(f"[测试] 异常: {e}")
             import traceback
             self._debug_safe(traceback.format_exc())
+        finally:
+            self._test_stop_event.clear()
 
     # ═══════════════════════════ 测试抓取推流码 ═══════════════════════════
+
+    def _test_stop(self):
+        """点击停止按钮：设置 stop event，让测试线程尽快退出"""
+        if hasattr(self, '_test_stop_event'):
+            self._test_stop_event.set()
+            self._debug("[停止测试] 已发送停止信号，当前步骤完成后退出")
+        else:
+            self._debug("[停止测试] 没有正在运行的测试")
 
     def _test_adcode(self):
         """测试抓取推流码：不读表、不匹配，对所有在线设备直接执行抓取流程"""
@@ -3453,56 +3493,64 @@ class MyApp(QtWidgets.QMainWindow):
                   if info.get('state', 0) != 0}
         if not online:
             self._debug("没有在线设备"); return
-        self._debug(f"[测试推流码] 对 {len(online)} 台在线设备直接执行抓取流程...")
-        self._debug(f"[测试推流码] 前提: 手机当前已打开TikTok视频")
+        # 重置停止事件
+        self._test_stop_event.clear()
+        self._debug(f"[测试推流码] 对 {len(online)} 台在线设备顺序执行抓取流程（慢速模式方便观察）")
+        self._debug(f"[测试推流码] 前提: 手机当前已打开TikTok视频。点 ⏹ 停止测试 可中止")
         threading.Thread(target=self._test_adcode_thread, args=(online,), daemon=True).start()
 
     def _test_adcode_thread(self, online_devices):
-        """测试推流码抓取线程"""
+        """测试推流码抓取线程 - 串行执行，慢速模式，支持中途停止"""
         try:
-            results_lock = threading.Lock()
-            results = {"success": [], "fail": []}
+            results = {"success": [], "fail": [], "skipped": []}
+            stop_cb = lambda: self._test_stop_event.is_set()
 
-            def _process_one(did, info):
+            # 按自定义名排序，串行执行
+            sorted_devs = sorted(online_devices.items(), key=lambda x: x[1].get('name', ''))
+            total = len(sorted_devs)
+
+            for idx, (did, info) in enumerate(sorted_devs):
                 name = info.get('name', did)
+                if stop_cb():
+                    self._debug_safe(f"[测试推流码] 已停止，剩余 {total - idx} 台设备未执行")
+                    for _did, _info in sorted_devs[idx:]:
+                        results["skipped"].append({"name": _info.get('name', _did)})
+                    break
+
+                self._debug_safe(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                self._debug_safe(f"  [{idx+1}/{total}] 设备 {name}")
+                self._debug_safe(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                 c = _IMouseProClient("127.0.0.1", IMOUSE_PRO_PORT)
-                self._debug_safe(f"  [{name}] 开始推流码抓取流程")
                 try:
                     # 横屏检测
                     c.fix_landscape(did, log=self._debug_safe)
-                    # 跑完整推流码抓取流程（点三个点→滑动→Ad settings→授权→复制）
-                    ad_code = _do_ad_auth_flow(c, did, is_first=False, log_fn=self._debug_safe)
+                    # 跑完整推流码抓取流程（慢速模式）
+                    ad_code = _do_ad_auth_flow(c, did, is_first=True,
+                                               log_fn=self._debug_safe,
+                                               stop_check=stop_cb,
+                                               slow=True)
+                    if stop_cb() and not ad_code:
+                        results["skipped"].append({"name": name})
+                        continue
                     if ad_code:
                         self._debug_safe(f"  [{name}] ✓ 推流码: {ad_code}")
-                        with results_lock:
-                            results["success"].append({"name": name, "code": ad_code})
+                        results["success"].append({"name": name, "code": ad_code})
                     else:
                         self._debug_safe(f"  [{name}] ✗ 未获取到推流码")
-                        with results_lock:
-                            results["fail"].append({"name": name, "reason": "流程走完但剪贴板没读到推流码"})
+                        results["fail"].append({"name": name, "reason": "流程走完但剪贴板没读到推流码"})
                 except Exception as e:
                     self._debug_safe(f"  [{name}] 异常: {e}")
-                    with results_lock:
-                        results["fail"].append({"name": name, "reason": str(e)})
-                return name
-
-            workers = min(4, len(online_devices))
-            with ThreadPoolExecutor(max_workers=workers) as pool:
-                futs = {pool.submit(_process_one, did, info): did
-                        for did, info in online_devices.items()}
-                for fut in as_completed(futs):
-                    try:
-                        name = fut.result()
-                        self._debug_safe(f"  设备 {name} 完成")
-                    except Exception as e:
-                        self._debug_safe(f"  设备异常: {e}")
+                    results["fail"].append({"name": name, "reason": str(e)})
+                # 设备间等待
+                time.sleep(1.5)
 
             # 弹窗
             ok = len(results["success"])
             fl = len(results["fail"])
-            total = ok + fl
+            sk = len(results["skipped"])
             lines = [
-                f"[测试推流码] 在线设备: {total}, 成功: {ok}, 失败: {fl}",
+                f"[测试推流码] 在线设备: {total}",
+                f"  成功: {ok}, 失败: {fl}, 已跳过: {sk}",
             ]
             if results["success"]:
                 lines.append(""); lines.append("═══ 成功明细 ═══")
@@ -3512,6 +3560,10 @@ class MyApp(QtWidgets.QMainWindow):
                 lines.append(""); lines.append("═══ 失败明细 ═══")
                 for r in results["fail"]:
                     lines.append(f"  {r['name']} → {r['reason']}")
+            if results["skipped"]:
+                lines.append(""); lines.append("═══ 已跳过 (手动停止) ═══")
+                for r in results["skipped"]:
+                    lines.append(f"  {r['name']}")
 
             self._signal_msgEvent.emit({
                 "fun": "_show_result_dialog", "status": 0,
@@ -3522,6 +3574,8 @@ class MyApp(QtWidgets.QMainWindow):
             self._debug_safe(f"[测试推流码] 异常: {e}")
             import traceback
             self._debug_safe(traceback.format_exc())
+        finally:
+            self._test_stop_event.clear()
 
     # ═══════════════════════════ 完播率分析 (Tab4 本地Excel) ═══════════════════════════
 
