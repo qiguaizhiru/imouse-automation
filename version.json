@@ -1,8 +1,8 @@
 {
   "pro": {
-    "version": "2.2.5",
-    "timestamp": "2026-04-23 16:48:51",
-    "changelog": "SWIPE_ROW_Y 960→965",
+    "version": "2.2.6",
+    "timestamp": "2026-04-23 17:00:19",
+    "changelog": "本地OpenCV模板匹配替代iMouse识图API",
     "files": {
       "imouse6.16.py": "1",
       "tiktok_form.py": "1",
@@ -10,9 +10,9 @@
     }
   },
   "xp": {
-    "version": "2.2.5",
-    "timestamp": "2026-04-23 16:48:51",
-    "changelog": "SWIPE_ROW_Y 960→965",
+    "version": "2.2.6",
+    "timestamp": "2026-04-23 17:00:19",
+    "changelog": "本地OpenCV模板匹配替代iMouse识图API",
     "files": {
       "imouse6.16_xp.py": "1",
       "tiktok_form.py": "1",

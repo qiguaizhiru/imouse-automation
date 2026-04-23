@@ -68,7 +68,7 @@ T_APP_LAUNCH = 6.0; T_PAGE_LOAD = 3.5; T_CLICK = 1.5; T_SWIPE = 2.0
 TIKTOK_SCHEME = "snssdk1233://"
 
 # ── 自动更新配置 ──
-LOCAL_VERSION = "2.2.5"
+LOCAL_VERSION = "2.2.6"
 UPDATE_CHANNEL = "xp"  # "pro" 或 "xp"
 UPDATE_URLS = [
     # GitHub raw 原生（始终最新，无CDN缓存问题）
@@ -149,26 +149,15 @@ class _IMouseXPClient:
         rd = r.get("data",{})
         if isinstance(rd,dict): return rd.get("text","")
         return rd or None
-    def _conv_rect(self, rect, is_xywh=False):
-        """将rect转为XP格式 [lx,ty,rx,by]。
-        - 4角点 [[x1,y1],[x2,y2],[x3,y3],[x4,y4]] → min/max包围盒
-        - is_xywh=True 且 [x,y,w,h] → [x,y,x+w,y+h]
-        - 其他原样返回
-        """
-        if rect is None: return None
-        try:
-            if len(rect) == 4 and all(isinstance(p, (list, tuple)) and len(p) == 2 for p in rect):
-                xs = [p[0] for p in rect]; ys = [p[1] for p in rect]
-                return [min(xs), min(ys), max(xs), max(ys)]
-            if is_xywh and len(rect) == 4:
-                x, y, w, h = rect
-                return [x, y, x + w, y + h]
-        except Exception: pass
-        return rect
     def find_image(self, did, img_b64, similarity=0.8, rect=None):
+        # 优先用本地 cv2 模板匹配（截图+本地匹配，比iMouse原生识图精度高）
+        scr = _get_screen_b64(self, did)
+        if scr:
+            r = _cv_find_image(scr, img_b64, similarity, rect)
+            if r: return r
+        # Fallback: iMouse 原生识图 API
         data = {"id":did,"img_list":[img_b64],"similarity":similarity}
-        r2 = self._conv_rect(rect, is_xywh=False)
-        if r2: data["rect"] = r2
+        if rect: data["rect"]=rect
         r = self._post("/pic/find-image", data, quiet=True)
         if r and r.get("status")==200:
             rd=r.get("data",{}); lst=rd.get("list",[])
@@ -441,6 +430,90 @@ def _load_icon(fn):
     if not os.path.exists(p): _ICON_B64_CACHE[fn]=None; return None
     with open(p,"rb") as f: v=base64.b64encode(f.read()).decode()
     _ICON_B64_CACHE[fn]=v; return v
+
+# 本地 OpenCV 模板匹配（比 iMouse 原生识图更稳）
+_CV_AVAILABLE = None
+def _cv_find_image(screen_b64, tpl_b64, similarity=0.8, rect=None):
+    """本地模板匹配，返回 (center_x, center_y, confidence) 或 None
+    screen_b64: 截图的 base64 字符串
+    tpl_b64: 模板图的 base64 字符串
+    rect: 搜索区域。支持两种格式:
+        - 4角点 [[x1,y1],[x2,y2],[x3,y3],[x4,y4]]
+        - 边界框 [lx, ty, rx, by] 或 [x, y, w, h]（自动识别）
+    """
+    global _CV_AVAILABLE
+    if _CV_AVAILABLE is False: return None
+    try:
+        if _CV_AVAILABLE is None:
+            import cv2 as _cv2, numpy as _np
+            _CV_AVAILABLE = True
+        else:
+            import cv2 as _cv2, numpy as _np
+        screen_bytes = base64.b64decode(screen_b64) if isinstance(screen_b64, str) else screen_b64
+        tpl_bytes = base64.b64decode(tpl_b64) if isinstance(tpl_b64, str) else tpl_b64
+        screen_arr = _np.frombuffer(screen_bytes, _np.uint8)
+        screen_img = _cv2.imdecode(screen_arr, _cv2.IMREAD_COLOR)
+        tpl_arr = _np.frombuffer(tpl_bytes, _np.uint8)
+        tpl_img = _cv2.imdecode(tpl_arr, _cv2.IMREAD_COLOR)
+        if screen_img is None or tpl_img is None: return None
+        h_scr, w_scr = screen_img.shape[:2]
+        h_tpl, w_tpl = tpl_img.shape[:2]
+        # 裁搜索区
+        ox, oy = 0, 0
+        if rect:
+            try:
+                if len(rect) == 4 and all(isinstance(p, (list, tuple)) and len(p) == 2 for p in rect):
+                    # 4 角点
+                    xs = [p[0] for p in rect]; ys = [p[1] for p in rect]
+                    lx, ty, rx, by = min(xs), min(ys), max(xs), max(ys)
+                elif len(rect) == 4:
+                    # [lx, ty, rx, by] 或 [x,y,w,h] - 启发式识别
+                    a, b, c, d = rect
+                    if c > a and d > b and c <= w_scr and d <= h_scr:
+                        lx, ty, rx, by = a, b, c, d  # [lx,ty,rx,by]
+                    else:
+                        lx, ty, rx, by = a, b, a+c, b+d  # [x,y,w,h]
+                else:
+                    lx, ty, rx, by = 0, 0, w_scr, h_scr
+                lx = max(0, min(lx, w_scr)); rx = max(0, min(rx, w_scr))
+                ty = max(0, min(ty, h_scr)); by = max(0, min(by, h_scr))
+                if rx - lx < w_tpl or by - ty < h_tpl:
+                    return None  # 搜索区比模板小，模板匹配会失败
+                screen_img = screen_img[ty:by, lx:rx]
+                ox, oy = lx, ty
+            except Exception: pass
+        # 模板匹配
+        result = _cv2.matchTemplate(screen_img, tpl_img, _cv2.TM_CCOEFF_NORMED)
+        _, max_val, _, max_loc = _cv2.minMaxLoc(result)
+        if max_val < similarity: return None
+        cx = max_loc[0] + w_tpl // 2 + ox
+        cy = max_loc[1] + h_tpl // 2 + oy
+        return (int(cx), int(cy), float(max_val))
+    except ImportError:
+        _CV_AVAILABLE = False
+        return None
+    except Exception:
+        return None
+
+def _get_screen_b64(c, did):
+    """获取设备截图的base64字符串，兼容Pro和XP"""
+    # 先尝试 XP 风格
+    try:
+        ss = c._post("/pic/screenshot", {"id": did, "jpg": True})
+        if ss and ss.get("status") == 200:
+            d = ss.get("data", {})
+            img = d.get("img") or d.get("screenshot") or d.get("base64")
+            if img: return img
+    except Exception: pass
+    # 再尝试 Pro 风格
+    try:
+        ss = c._post("/pic/screenshot", {"id": did, "jpg": True})
+        if ss and ss.get("status") == 0:
+            d = ss.get("data", {})
+            img = d.get("img") or d.get("screenshot")
+            if img: return img
+    except Exception: pass
+    return None
 
 def _normalize_account_id(raw):
     if not raw: return ""
