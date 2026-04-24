@@ -1,8 +1,8 @@
 {
   "pro": {
-    "version": "2.3.1",
-    "timestamp": "2026-04-23 18:53:37",
-    "changelog": "剪贴板判断放宽+打印完整内容调试",
+    "version": "2.3.2",
+    "timestamp": "2026-04-24 09:57:13",
+    "changelog": "SWIPE_ROW_Y回到测试验证值965",
     "files": {
       "imouse6.16.py": "1",
       "tiktok_form.py": "1",
@@ -10,9 +10,9 @@
     }
   },
   "xp": {
-    "version": "2.3.1",
-    "timestamp": "2026-04-23 18:53:37",
-    "changelog": "剪贴板判断放宽+打印完整内容调试",
+    "version": "2.3.2",
+    "timestamp": "2026-04-24 09:57:13",
+    "changelog": "SWIPE_ROW_Y回到测试验证值965",
     "files": {
       "imouse6.16_xp.py": "1",
       "tiktok_form.py": "1",
