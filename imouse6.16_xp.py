@@ -68,7 +68,7 @@ T_APP_LAUNCH = 6.0; T_PAGE_LOAD = 3.5; T_CLICK = 1.5; T_SWIPE = 2.0
 TIKTOK_SCHEME = "snssdk1233://"
 
 # ── 自动更新配置 ──
-LOCAL_VERSION = "2.3.3"
+LOCAL_VERSION = "2.3.4"
 UPDATE_CHANNEL = "xp"  # "pro" 或 "xp"
 UPDATE_URLS = [
     # GitHub raw 原生（始终最新，无CDN缓存问题）
@@ -768,8 +768,8 @@ def run_adcode_full(phase="all", port=9911, workers=20, days=1, videos_str="", m
                     if attempt<MAX_RETRIES: time.sleep(1)
             return uid, []
 
-        log_fn(f"  并发拉取 {len(accounts)} 个账号视频 (10并发, 2次重试)...")
-        with ThreadPoolExecutor(max_workers=10) as pool:
+        log_fn(f"  并发拉取 {len(accounts)} 个账号视频 (5并发, 2次重试)...")
+        with ThreadPoolExecutor(max_workers=5) as pool:
             futures={pool.submit(_fetch_one_account, acc): acc for acc in accounts}
             for fut in as_completed(futures):
                 uid, vids = fut.result()
@@ -1840,6 +1840,10 @@ class MyApp(QtWidgets.QMainWindow):
             self._show_update_ready_dialog(data)
             return
 
+        # 静默处理周期推送类回调（避免日志被刷屏）
+        if fun in ('user_info', 'im_log', 'airplay_connect_log', 'restart_log'):
+            return
+
         if status not in (0, 200):
             self._debug("调用 {} 接口失败，原因:{}".format(fun, data.get('message', '')))
             return
@@ -2241,9 +2245,9 @@ class MyApp(QtWidgets.QMainWindow):
                         if attempt < 2: time.sleep(1)
                 return uid, []
 
-            self._debug_safe(f"  并发拉取 {len(accounts)} 个账号 (10并发)...")
+            self._debug_safe(f"  并发拉取 {len(accounts)} 个账号 (5并发)...")
             video_data = {}
-            with ThreadPoolExecutor(max_workers=10) as pool:
+            with ThreadPoolExecutor(max_workers=5) as pool:
                 futs = {pool.submit(_fetch_one, acc): acc for acc in accounts}
                 for fut in as_completed(futs):
                     uid, vids = fut.result()
