@@ -66,7 +66,7 @@ T_APP_LAUNCH = 6.0; T_PAGE_LOAD = 3.5; T_CLICK = 1.5; T_SWIPE = 2.0
 TIKTOK_SCHEME = "snssdk1233://"
 
 # ── 自动更新配置 ──
-LOCAL_VERSION = "2.3.2"
+LOCAL_VERSION = "2.3.3"
 UPDATE_CHANNEL = "pro"  # "pro" 或 "xp"
 UPDATE_URLS = [
     # GitHub raw 原生（始终最新，无CDN缓存问题）
@@ -95,22 +95,22 @@ def _version_ge(v1, v2):
         return t1 >= t2
     except Exception:
         return v1 == v2
-VIDEO_GRID = {1:(90,540),2:(255,540),3:(410,550),4:(90,760),5:(255,760),6:(410,760)}
-PX = {"profile_tab":(450,1000),"three_dots":(463,829),"ad_auth_toggle":(444,351),
-      "authorize":(250,990),"save":(250,990),"manage":(420,560),"copy_code":(255,886),
-      "back":(30,90),"allow_popup":(290,495),"always_allow":(191,719)}
-SWIPE_ROW_Y=965; SWIPE_START_X=485; SWIPE_END_X=8
+VIDEO_GRID = {1:(66,500),2:(200,450),3:(340,460),4:(60,630),5:(200,640),6:(340,640)}
+PX = {"profile_tab":(380,860),"three_dots":(378,686),"ad_auth_toggle":(365,290),
+      "authorize":(210,825),"save":(215,825),"manage":(350,465),"copy_code":(210,740),
+      "back":(26,73),"allow_popup":(290,495),"always_allow":(191,719)}
+SWIPE_ROW_Y=800; SWIPE_START_X=350; SWIPE_END_X=50
 ICON_SIM=0.7; SKIP_POPUP_CHECK=True
-AD_ICON_FILE="ad_settings_icon.png"; AD_SEARCH_RECT=[[0,900],[0,1020],[500,900],[500,1020]]
-AD_FALLBACK_POSITIONS=[(280,957),(280,957)]
+AD_ICON_FILE="ad_settings_icon.png"; AD_SEARCH_RECT=[[0,750],[0,860],[414,750],[414,860]]
+AD_FALLBACK_POSITIONS=[(302,802),(220,802)]
 AD_AUTH_ON_ICON_FILE="ad_auth_on.png"; AD_AUTH_ON_ICON_SIM=0.75
-AD_AUTH_ON_SEARCH_RECT=[[350,300],[350,400],[500,300],[500,400]]
-COPY_LINK_ICON_FILE="copy_link_icon.png"; COPY_LINK_SEARCH_RECT=[[0,800],[0,1100],[500,800],[500,1100]]
-COPY_LINK_FALLBACK=(100,960)
-THREE_DOTS_ICON_FILE="icon/three_dots_icon.bmp"; THREE_DOTS_ICON_SIM=0.70
-THREE_DOTS_SEARCH_RECT=[[300,600],[300,1100],[500,600],[500,1100]]
+AD_AUTH_ON_SEARCH_RECT=[[300,240],[300,340],[414,240],[414,340]]
+COPY_LINK_ICON_FILE="copy_link_icon.png"; COPY_LINK_SEARCH_RECT=[[0,670],[0,896],[414,670],[414,896]]
+COPY_LINK_FALLBACK=(72,810)
+THREE_DOTS_ICON_FILE="three_dots_icon.png"; THREE_DOTS_ICON_SIM=0.75
+THREE_DOTS_SEARCH_RECT=[[300,550],[300,800],[414,550],[414,800]]
 DONT_ALLOW_ICON_FILE="icon/dont_allow.bmp"; DONT_ALLOW_SIM=0.70
-DONT_ALLOW_SEARCH_RECT=[[0,0],[0,1100],[500,0],[500,1100]]  # 全屏
+DONT_ALLOW_SEARCH_RECT=[[0,0],[0,896],[414,0],[414,896]]  # 全屏
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ── 投流码: HTTP API 客户端 (直连 iMouse Pro 9912 端口) ──
@@ -133,10 +133,7 @@ class _IMouseProClient:
     def tap(self, did, x, y):
         return self._post("click",{"deviceid":did,"button":"left","x":x,"y":y,"time":0})
     def swipe(self, did, sx, sy, ex, ey):
-        # 参照开发者工具实测: direction=right, 不传len, step_sleep=0, brake=False
-        return self._post("swipe",{"deviceid":did,"direction":"right","button":"left",
-                                    "sx":sx,"sy":sy,"ex":ex,"ey":ey,"for":0,
-                                    "step_sleep":0})
+        return self._post("swipe",{"deviceid":did,"direction":"left" if ex-sx<0 else "right","button":"left","length":0.9,"sx":sx,"sy":sy,"ex":ex,"ey":ey,"for":0})
     def press_home(self, did):
         return self._post("send_key",{"deviceid":did,"key":"","fn_key":"WIN+h"})
     def open_url(self, did, url):
@@ -200,8 +197,7 @@ class _IMouseProClient:
         """垂直滑动"""
         direction = "up" if end_y < start_y else "down"
         return self._post("swipe",{"deviceid":did,"direction":direction,"button":"left",
-                                    "sx":x,"sy":start_y,"ex":x,"ey":end_y,"for":0,
-                                    "step_sleep":0})
+                                    "length":0.5,"sx":x,"sy":start_y,"ex":x,"ey":end_y,"for":0})
     def fix_landscape(self, did, log=None):
         """检测横屏并点击(834,39)返回个人页，返回True表示触发了横屏修正"""
         try:
