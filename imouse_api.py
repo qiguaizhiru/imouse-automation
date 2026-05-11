@@ -392,8 +392,18 @@ class WsApi(HttpApi):
         fun = post_data.get('fun', '')
         if fun == 'loop_device_screenshot':
             return post_data
+        # 如果调用方在 data.outtime 里指定了内部超时（ms），WS 等待时间用它+10s
+        wait_seconds = self._outtime
+        try:
+            inner = post_data.get('data', {})
+            if isinstance(inner, dict):
+                inner_outtime = inner.get('outtime')
+                if inner_outtime and isinstance(inner_outtime, (int, float)) and inner_outtime > 0:
+                    wait_seconds = max(self._outtime, inner_outtime / 1000.0 + 10)
+        except Exception:
+            pass
         start = time.time()
-        while time.time() - start < self._outtime:
+        while time.time() - start < wait_seconds:
             if self._QApplication:
                 self._QApplication.processEvents()
             if msgid in self._recv_msg_list:

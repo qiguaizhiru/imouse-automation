@@ -1,8 +1,8 @@
 {
   "pro": {
-    "version": "2.3.4",
-    "timestamp": "2026-04-30 14:44:30",
-    "changelog": "静默user_info心跳+并发降为5",
+    "version": "2.3.5",
+    "timestamp": "2026-05-11 10:30:26",
+    "changelog": "上传超时从30s扩展为outtime+10s",
     "files": {
       "imouse6.16.py": "1",
       "tiktok_form.py": "1",
@@ -10,9 +10,9 @@
     }
   },
   "xp": {
-    "version": "2.3.4",
-    "timestamp": "2026-04-30 14:44:30",
-    "changelog": "静默user_info心跳+并发降为5",
+    "version": "2.3.5",
+    "timestamp": "2026-05-11 10:30:26",
+    "changelog": "上传超时从30s扩展为outtime+10s",
     "files": {
       "imouse6.16_xp.py": "1",
       "tiktok_form.py": "1",

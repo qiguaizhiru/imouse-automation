@@ -66,7 +66,7 @@ T_APP_LAUNCH = 6.0; T_PAGE_LOAD = 3.5; T_CLICK = 1.5; T_SWIPE = 2.0
 TIKTOK_SCHEME = "snssdk1233://"
 
 # ── 自动更新配置 ──
-LOCAL_VERSION = "2.3.4"
+LOCAL_VERSION = "2.3.5"
 UPDATE_CHANNEL = "pro"  # "pro" 或 "xp"
 UPDATE_URLS = [
     # GitHub raw 原生（始终最新，无CDN缓存问题）
@@ -4623,7 +4623,7 @@ class MyApp(QtWidgets.QMainWindow):
                             files=batch,
                             name='Recents',
                             devlist=[],
-                            outtime=60000  # 每批60秒
+                            outtime=120000  # 每批120秒上限（WS自动用此值+10s作等待）
                         )
                         status_ok = ret and ret.get('status', -1) in (0, 200)
                         # 检查 data.code (XP: 0=成功)
