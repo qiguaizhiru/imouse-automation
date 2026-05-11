@@ -1,8 +1,8 @@
 {
   "pro": {
-    "version": "2.3.6",
-    "timestamp": "2026-05-11 11:02:01",
-    "changelog": "上传不再重试避免重复上传",
+    "version": "2.3.7",
+    "timestamp": "2026-05-11 17:33:46",
+    "changelog": "修复推流码log_fn未定义异常",
     "files": {
       "imouse6.16.py": "1",
       "tiktok_form.py": "1",
@@ -10,9 +10,9 @@
     }
   },
   "xp": {
-    "version": "2.3.6",
-    "timestamp": "2026-05-11 11:02:01",
-    "changelog": "上传不再重试避免重复上传",
+    "version": "2.3.7",
+    "timestamp": "2026-05-11 17:33:46",
+    "changelog": "修复推流码log_fn未定义异常",
     "files": {
       "imouse6.16_xp.py": "1",
       "tiktok_form.py": "1",

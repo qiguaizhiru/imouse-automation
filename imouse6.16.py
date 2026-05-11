@@ -66,7 +66,7 @@ T_APP_LAUNCH = 6.0; T_PAGE_LOAD = 3.5; T_CLICK = 1.5; T_SWIPE = 2.0
 TIKTOK_SCHEME = "snssdk1233://"
 
 # ── 自动更新配置 ──
-LOCAL_VERSION = "2.3.6"
+LOCAL_VERSION = "2.3.7"
 UPDATE_CHANNEL = "pro"  # "pro" 或 "xp"
 UPDATE_URLS = [
     # GitHub raw 原生（始终最新，无CDN缓存问题）
@@ -673,7 +673,7 @@ def _do_ad_auth_flow(c,did,is_first=False,log_fn=None,stop_check=None,slow=False
         _log(f"    {_tag}[推流码] 剪贴板最终内容: {last_content!r} (不符合推流码格式)")
     return None
 
-def _process_device_videos(c,feishu,did,remaining,video_nums=None,tikhub=None):
+def _process_device_videos(c,feishu,did,remaining,video_nums=None,tikhub=None,log_fn=print):
     results=[]; max_pos=max(VIDEO_GRID.keys())
     positions=video_nums if video_nums else list(range(2,max_pos+1))
     is_first=True
@@ -943,7 +943,7 @@ def run_adcode_full(phase="all", port=9912, workers=20, days=1, videos_str="", m
             c2.press_home(did); time.sleep(1.5)
             c2.open_url(did,TIKTOK_SCHEME); time.sleep(T_APP_LAUNCH+3)
             c2.tap(did,PX["profile_tab"][0],PX["profile_tab"][1]); time.sleep(T_PAGE_LOAD+1.5)
-            dr=_process_device_videos(c2,fc,did,remaining,video_nums,tc)
+            dr=_process_device_videos(c2,fc,did,remaining,video_nums,tc,log_fn=log_fn)
             ok=sum(1 for r in dr if r.get("status")=="ok")
             # remaining 里剩下的就是未成功匹配/获取的视频
             failed_links=[]
