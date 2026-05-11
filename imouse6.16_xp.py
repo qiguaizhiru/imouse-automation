@@ -68,7 +68,7 @@ T_APP_LAUNCH = 6.0; T_PAGE_LOAD = 3.5; T_CLICK = 1.5; T_SWIPE = 2.0
 TIKTOK_SCHEME = "snssdk1233://"
 
 # ── 自动更新配置 ──
-LOCAL_VERSION = "2.3.5"
+LOCAL_VERSION = "2.3.6"
 UPDATE_CHANNEL = "xp"  # "pro" 或 "xp"
 UPDATE_URLS = [
     # GitHub raw 原生（始终最新，无CDN缓存问题）
@@ -4657,12 +4657,11 @@ class MyApp(QtWidgets.QMainWindow):
 
     def _batch_upload_thread(self, upload_tasks, file_desc='文件'):
         """批量上传线程 - 3设备并发"""
-        MAX_RETRIES = 3
         success = 0
         fail = 0
 
         def _upload_one_device(did, name, file_list):
-            """分批上传（每批5个），检查 data.code 确认真正成功"""
+            """分批上传（每批5个），不重试（上传非幂等，重试会导致重复上传）"""
             total = len(file_list)
             BATCH_SIZE = 5  # 官方SDK也用5个一批
             self._debug_safe(f"  [{name}] 开始上传 {total} 个{file_desc} (分{(total+BATCH_SIZE-1)//BATCH_SIZE}批)...")
@@ -4670,39 +4669,34 @@ class MyApp(QtWidgets.QMainWindow):
             batches = [file_list[i:i+BATCH_SIZE] for i in range(0, total, BATCH_SIZE)]
             ok_count = 0
             for bi, batch in enumerate(batches):
-                success = False
-                for retry in range(1, MAX_RETRIES + 1):
-                    try:
-                        ret = self.api.shortcut_up_photo(
-                            deviceid=did,
-                            files=batch,
-                            name='Recents',
-                            devlist=[],
-                            outtime=120000  # 每批120秒上限（WS自动用此值+10s作等待）
-                        )
-                        status_ok = ret and ret.get('status', -1) in (0, 200)
-                        # 检查 data.code (XP: 0=成功)
-                        data = (ret or {}).get('data', {}) or {}
-                        code_ok = data.get('code', -1) == 0 if status_ok else False
-                        if status_ok and code_ok:
-                            ok_count += len(batch)
-                            self._debug_safe(f"  [{name}] 第{bi+1}/{len(batches)}批: {len(batch)}个 OK")
-                            success = True
-                            break
+                try:
+                    ret = self.api.shortcut_up_photo(
+                        deviceid=did,
+                        files=batch,
+                        name='Recents',
+                        devlist=[],
+                        outtime=120000  # 每批120秒上限（WS自动用此值+10s作等待）
+                    )
+                    status_ok = ret and ret.get('status', -1) in (0, 200)
+                    data = (ret or {}).get('data', {}) or {}
+                    code_ok = data.get('code', -1) == 0 if status_ok else False
+                    if status_ok and code_ok:
+                        ok_count += len(batch)
+                        self._debug_safe(f"  [{name}] 第{bi+1}/{len(batches)}批: {len(batch)}个 OK")
+                    else:
+                        code = data.get('code', '?')
+                        msg = data.get('message') or (ret.get('message','') if ret else '无响应')
+                        # 超时类失败不报错（iMouse 可能后台仍在执行，避免重试导致重复上传）
+                        if '超时' in str(msg) or 'timeout' in str(msg).lower():
+                            self._debug_safe(f"  [{name}] 第{bi+1}批 WS超时但可能已成功(iMouse后台继续执行)：{msg}")
+                            ok_count += len(batch)  # 乐观计入成功，避免误判
                         else:
-                            code = data.get('code', '?')
-                            msg = data.get('message') or (ret.get('message','') if ret else '无响应')
-                            self._debug_safe(f"  [{name}] 第{bi+1}批第{retry}次失败: code={code} msg={msg}")
-                            if retry < MAX_RETRIES: time.sleep(3)
-                    except Exception as e:
-                        self._debug_safe(f"  [{name}] 第{bi+1}批第{retry}次异常: {e}")
-                        if retry < MAX_RETRIES: time.sleep(3)
-                if not success:
-                    self._debug_safe(f"  [{name}] 第{bi+1}批彻底失败，已放弃")
-                    return False
-                time.sleep(1)  # 批间等待
+                            self._debug_safe(f"  [{name}] 第{bi+1}批失败: code={code} msg={msg}")
+                except Exception as e:
+                    self._debug_safe(f"  [{name}] 第{bi+1}批异常: {e}")
+                time.sleep(2)  # 批间等待，让iMouse完成上一批
 
-            self._debug_safe(f"  [OK] {name}: {ok_count}/{total} 个{file_desc}上传成功")
+            self._debug_safe(f"  [OK] {name}: {ok_count}/{total} 个{file_desc}上传完成")
             return ok_count == total
 
         with ThreadPoolExecutor(max_workers=3) as pool:
