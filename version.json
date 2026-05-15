@@ -1,8 +1,8 @@
 {
   "pro": {
-    "version": "2.3.7",
-    "timestamp": "2026-05-11 17:33:46",
-    "changelog": "修复推流码log_fn未定义异常",
+    "version": "2.3.8",
+    "timestamp": "2026-05-15 18:01:06",
+    "changelog": "V3成功无视频就不再fallback大幅提速",
     "files": {
       "imouse6.16.py": "1",
       "tiktok_form.py": "1",
@@ -10,9 +10,9 @@
     }
   },
   "xp": {
-    "version": "2.3.7",
-    "timestamp": "2026-05-11 17:33:46",
-    "changelog": "修复推流码log_fn未定义异常",
+    "version": "2.3.8",
+    "timestamp": "2026-05-15 18:01:06",
+    "changelog": "V3成功无视频就不再fallback大幅提速",
     "files": {
       "imouse6.16_xp.py": "1",
       "tiktok_form.py": "1",
