@@ -8,9 +8,18 @@ from ..paths import resource_path
 
 logger = logging.getLogger("automation.nurture")
 
-# TikTok 桌面图标模板（用于判断是否跑回了桌面 / 重新打开）
+# 识图模板（养号流程用，与验证过的老程序一致）
 ICON_DIR = resource_path("icon")
-TIKTOK_ICON = os.path.join(ICON_DIR, "tiktok.bmp")
+TIKTOK_ICON = os.path.join(ICON_DIR, "tiktok.bmp")   # 桌面 TikTok 图标
+HOME_ICON = os.path.join(ICON_DIR, "home.png")       # TikTok 底部 Home
+HEART_ICON = os.path.join(ICON_DIR, "heart.png")     # 视频右侧爱心
+
+# 验证过的固定坐标（识图失败时兜底；来自实战养号程序）
+FALLBACK_HOME = (41, 830)      # 底部 Home
+FALLBACK_HEART = (386, 469)    # 点赞爱心
+LANDSCAPE_FIX = (71, 387)      # 横屏(直播)时点这里切竖屏
+LIVE_DOUBLE = (200, 500)       # 直播模式双击点赞位置
+TIKTOK_SCHEME = "tiktok://"    # 打开 TikTok 的 URL scheme
 
 DEFAULT_NURTURE_CONFIG = {
     # ── 总体控制 ──
@@ -37,7 +46,7 @@ DEFAULT_NURTURE_CONFIG = {
     "full_watch_chance": 0.1,        # 完整看完+重播的概率
 
     # ── 互动概率 ──
-    "like_chance": 0.15,             # 点赞概率
+    "like_chance": 0.8,              # 点赞概率（实战养号流程默认几乎每个都点）
     "double_tap_like_chance": 0.60,  # 双击点赞 vs 按钮点赞的比例
     "follow_chance": 0.03,           # 关注概率
     "comment_chance": 0.0,           # 评论概率（初始为0，新号不建议评论）
@@ -94,51 +103,158 @@ class NurtureTask(BaseTask):
         self._follows_given = 0
         self._searches_done = 0
         self._sessions_done = 0
+        self._live_mode = False   # 是否处于直播(横屏)模式
 
     def run(self, device):
         cfg = self.config
         total_duration = cfg["total_duration_min"] * 60
         session_limit = cfg["session_count"]
+        # 轮次上限换算成视频上限（简单模式是连续刷，不分轮）
+        video_limit = session_limit * cfg.get("videos_per_session", 15) if session_limit > 0 else 0
+        simple = cfg.get("simple_mode", True)
         start_time = time.time()
 
-        self._log(device, "开始养号流程")
+        self._log(device, "开始养号流程" + ("（简单模式）" if simple else "（完整模式）"))
         self._update_progress()
 
-        # 第一步: 打开 TikTok
-        self._open_tiktok(device)
+        # 初始化：打开 TikTok 并进入 For You 推荐页（验证过的流程）
+        self._init_device(device)
 
-        session_idx = 0
-        while True:
-            if self.should_stop:
-                break
-
-            # 检查时间限制
-            if total_duration > 0 and (time.time() - start_time) >= total_duration:
-                self._log(device, f"已达设定时长 {cfg['total_duration_min']} 分钟，结束")
-                break
-
-            # 检查轮次限制
-            if session_limit > 0 and session_idx >= session_limit:
-                self._log(device, f"已完成 {session_limit} 轮，结束")
-                break
-
-            session_idx += 1
-            self._log(device, f"--- 第 {session_idx} 轮开始 ---")
-            self._run_session(device)
-            self._sessions_done = session_idx
-
-            # 轮间休息
-            if not self.should_stop:
-                rest = random.uniform(5, 15)
-                self._log(device, f"轮间休息 {rest:.0f} 秒")
-                self.wait(rest)
+        if simple:
+            # ── 简单模式：连续刷视频（忠实复刻实战养号流程）──
+            while not self.should_stop:
+                if total_duration > 0 and (time.time() - start_time) >= total_duration:
+                    self._log(device, f"已达设定时长 {cfg['total_duration_min']} 分钟，结束")
+                    break
+                if video_limit > 0 and self._videos_watched >= video_limit:
+                    self._log(device, f"已刷 {video_limit} 个视频，结束")
+                    break
+                self.check_pause()
+                self._nurture_step(device)
+                self._videos_watched += 1
+                self._update_progress()
+        else:
+            # ── 完整模式：分轮 + 各种互动（未充分验证，opt-in）──
+            session_idx = 0
+            while not self.should_stop:
+                if total_duration > 0 and (time.time() - start_time) >= total_duration:
+                    break
+                if session_limit > 0 and session_idx >= session_limit:
+                    break
+                session_idx += 1
+                self._log(device, f"--- 第 {session_idx} 轮开始 ---")
+                self._run_session(device)
+                self._sessions_done = session_idx
+                if not self.should_stop:
+                    self.wait(random.uniform(5, 15))
 
         elapsed = (time.time() - start_time) / 60
         self._log(device, (
             f"养号结束 | 耗时: {elapsed:.1f}分钟 | "
-            f"观看: {self._videos_watched} | 点赞: {self._likes_given} | "
-            f"关注: {self._follows_given} | 搜索: {self._searches_done}"
+            f"观看: {self._videos_watched} | 点赞: {self._likes_given}"
         ))
+
+    # ═══════════════════════════════════════════
+    # 简单模式：忠实复刻实战养号流程
+    # ═══════════════════════════════════════════
+
+    def _init_device(self, device):
+        """初始化：回主屏 → 打开TikTok → 横屏检测 → 点Home → 右滑到For You"""
+        cfg = self.config
+        sim = cfg.get("guard_similarity", 0.7)
+
+        # 1. 回主屏幕
+        self._log(device, "回到主屏幕")
+        device.press_home()
+        self.wait(2)
+
+        # 2. 打开 TikTok（用 tiktok:// scheme，验证过的方式）
+        self._log(device, "打开 TikTok")
+        device.open_url(TIKTOK_SCHEME)
+        self.wait(5)
+
+        # 3. 横屏检测 → 直播模式
+        self._check_landscape(device)
+
+        # 4. 点击底部 Home（识图优先，兜底固定坐标）
+        loc = self._find_click(device, HOME_ICON, sim)
+        if loc:
+            self._log(device, f"识图Home ({loc[0]},{loc[1]})")
+        else:
+            device.tap(*FALLBACK_HOME)
+            self._log(device, f"固定坐标Home {FALLBACK_HOME}")
+        self.wait(2)
+
+        # 5. 向右滑动切到 For You（滑3次）
+        for _ in range(3):
+            if self.should_stop:
+                return
+            device.swipe_dir("right", length=0.5, sx=100, sy=50)
+            time.sleep(0.5)
+        self.wait(2)
+        self._log(device, "已进入 For You 推荐页")
+
+    def _nurture_step(self, device):
+        """刷一个视频：横屏检测 → 上滑 → 点赞（验证过的流程）"""
+        cfg = self.config
+
+        # 观看当前视频（随机停留，模拟观看；实战流程用 0-20 秒）
+        watch = random.uniform(cfg.get("watch_time_min", 3), cfg.get("watch_time_max", 20))
+        self._log(device, f"视频 {self._videos_watched + 1} - 观看 {watch:.0f}秒")
+        self.wait(watch)
+        if self.should_stop:
+            return
+
+        # 1. 横屏检测（刷到直播会横屏）
+        self._check_landscape(device)
+
+        # 2. 上滑到下一个视频
+        device.swipe_dir("up", length=0.5, sx=200, sy=550)
+        self.wait(1.5)
+        if self.should_stop:
+            return
+
+        # 3. 点赞（按配置概率；实战流程默认每个都点）
+        if random.random() < cfg.get("like_chance", 1.0):
+            if self._live_mode:
+                # 直播模式：双击屏幕中心
+                device.tap(*LIVE_DOUBLE)
+                time.sleep(0.15)
+                device.tap(*LIVE_DOUBLE)
+                self._log(device, "  双击点赞(直播)")
+            else:
+                loc = self._find_click(device, HEART_ICON, cfg.get("guard_similarity", 0.7))
+                if loc:
+                    self._log(device, f"  点赞 ({loc[0]},{loc[1]})")
+                else:
+                    device.tap(*FALLBACK_HEART)
+                    self._log(device, f"  点赞 {FALLBACK_HEART}")
+            self._likes_given += 1
+
+    def _check_landscape(self, device):
+        """检测横屏(直播)，是则点击切回竖屏并标记直播模式"""
+        try:
+            land = device.is_landscape()
+            if land:
+                device.tap(*LANDSCAPE_FIX)
+                self.wait(1.5)
+                self._live_mode = True
+                self._log(device, "检测到横屏(直播)，已切换")
+            elif land is False:
+                self._live_mode = False
+        except Exception:
+            pass
+
+    def _find_click(self, device, icon_path, sim):
+        """识图找到并点击，返回坐标或 None"""
+        if not os.path.exists(icon_path):
+            return None
+        loc = device.find_image_file(icon_path, sim)
+        if loc:
+            device.tap(loc[0], loc[1])
+            time.sleep(0.5)
+            return (loc[0], loc[1])
+        return None
 
     # ── 核心流程 ──
 

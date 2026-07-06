@@ -95,12 +95,39 @@ class Device:
             "sx": sx, "sy": sy, "ex": ex, "ey": ey, "for": 0,
         })
 
+    def swipe_dir(self, direction, length=0.5, sx=None, sy=None):
+        """按方向+距离滑动（与验证过的养号流程一致，只给起点+方向+长度）"""
+        logger.debug(f"[{self.name}] swipe_dir {direction} len={length} ({sx},{sy})")
+        data = {"deviceid": self.device_id, "direction": direction,
+                "button": "left", "length": length, "for": 0}
+        if sx is not None:
+            data["sx"] = sx
+        if sy is not None:
+            data["sy"] = sy
+        return self._post("swipe", data)
+
     def press_home(self):
-        """回主屏幕（用 HOME 键，与发布流程一致，已验证可用）"""
+        """回主屏幕（用 WIN+h，与验证过的养号/发布流程一致）"""
         logger.debug(f"[{self.name}] press_home")
         return self._post("send_key", {
-            "deviceid": self.device_id, "key": "", "fn_key": "HOME",
+            "deviceid": self.device_id, "key": "", "fn_key": "WIN+h",
         })
+
+    def is_landscape(self):
+        """截图判断是否横屏（宽>高）。养号刷到直播会横屏，需特殊处理。
+        返回 True/False，截图失败返回 None。"""
+        b64 = self.screenshot_b64()
+        if not b64:
+            return None
+        try:
+            from .vision import get_image_size
+            size = get_image_size(b64)
+            if not size:
+                return None
+            w, h = size
+            return w > h
+        except Exception:
+            return None
 
     def open_url(self, url):
         logger.debug(f"[{self.name}] open_url: {url}")

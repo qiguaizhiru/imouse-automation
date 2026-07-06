@@ -1,7 +1,7 @@
 {
   "app": {
-    "version": "1.1.1",
-    "changelog": "v1.1.1 养号简单模式：只做看视频+上滑+点赞，不再跑到购物页/相册",
+    "version": "1.1.2",
+    "changelog": "v1.1.2 养号改用实战验证流程：识图Home/爱心+横屏直播检测+正确坐标，彻底解决跑偏",
     "files": [
       "automation/__init__.py",
       "automation/app.py",
@@ -21,7 +21,23 @@
       "automation/ui_form.py",
       "automation/updater.py",
       "automation/version.py",
-      "automation/vision.py"
+      "automation/vision.py",
+      "icon/+black.bmp",
+      "icon/+white.bmp",
+      "icon/Add a catchy title.bmp",
+      "icon/Add a catchy title2.bmp",
+      "icon/Add description.bmp",
+      "icon/Writing a long description.bmp",
+      "icon/delete.bmp",
+      "icon/heart.png",
+      "icon/home.png",
+      "icon/next.bmp",
+      "icon/post.bmp",
+      "icon/record.bmp",
+      "icon/record2.bmp",
+      "icon/tiktok.bmp",
+      "icon/usesound.bmp",
+      "icon/旧版post.bmp"
     ]
   }
 }

@@ -256,7 +256,7 @@ class Ui_AutomationWindow(object):
 
         self._interact_spins = {}
         interact_items = [
-            ("like_chance", "点赞概率:", 0.15, 0, 0),
+            ("like_chance", "点赞概率:", 0.8, 0, 0),
             ("follow_chance", "关注概率:", 0.03, 0, 2),
             ("comment_chance", "评论概率:", 0.00, 0, 4),
             ("profile_view_chance", "查看主页:", 0.05, 1, 0),
