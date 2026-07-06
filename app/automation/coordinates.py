@@ -27,19 +27,27 @@ SCREEN = {
 # ── 普通机型坐标 (414×896) ──
 # 点位格式: (x, y) 中心点；swipe 用 dict {sx, sy, ex, ey}
 NORMAL_COORDS = {
-    # 点击类（中心点）
-    "video_center":   (205, 400),   # 屏幕中央（双击点赞、暂停）
-    "like_button":    (385, 340),   # 右侧爱心
+    # ── 养号验证坐标（来自实战程序，iPhone 11 414×896；SE 按比例自动换算）──
+    "nurture_home":     (41, 830),   # 底部 Home（识图 home.png 优先，此为兜底）
+    "nurture_heart":    (386, 469),  # 视频右侧爱心（识图 heart.png 优先，此为兜底）
+    "nurture_swipe_up": (200, 550),  # 上滑下一个视频的起点
+    "nurture_foryou":   (100, 50),   # 右滑到 For You 的起点
+    "landscape_fix":    (71, 387),   # 横屏(直播)时点这里切回竖屏
+    "live_double":      (200, 500),  # 直播模式双击点赞位置
+
+    # ── 其它点位（发布/完整模式用）──
+    "video_center":   (205, 400),   # 屏幕中央
+    "like_button":    (386, 469),   # 右侧爱心（同养号，验证坐标）
     "comment_button": (385, 420),   # 右侧评论
     "share_button":   (385, 500),   # 右侧分享
     "follow_button":  (385, 270),   # 头像下方 + 号
     "avatar":         (385, 230),   # 头像（进主页）
     "search":         (365, 35),    # 右上搜索图标
     "search_box":     (207, 38),    # 搜索输入框
-    "home_tab":       (40, 870),    # 底部 首页
-    "discover_tab":   (125, 870),   # 底部 发现
-    "inbox_tab":      (295, 870),   # 底部 收件箱
-    "profile_tab":    (380, 870),   # 底部 个人页
+    "home_tab":       (41, 830),    # 底部 首页（验证坐标）
+    "discover_tab":   (125, 830),   # 底部 发现
+    "inbox_tab":      (295, 830),   # 底部 收件箱
+    "profile_tab":    (380, 830),   # 底部 个人页
     "back":           (27, 72),     # 左上返回
     # 滑动类
     "swipe_next":     {"sx": 205, "sy": 700, "ex": 205, "ey": 200},   # 上滑下一个

@@ -176,20 +176,22 @@ class NurtureTask(BaseTask):
         # 3. 横屏检测 → 直播模式
         self._check_landscape(device)
 
-        # 4. 点击底部 Home（识图优先，兜底固定坐标）
+        # 4. 点击底部 Home（识图优先，兜底固定坐标——按机型取，SE自动换算）
         loc = self._find_click(device, HOME_ICON, sim)
         if loc:
             self._log(device, f"识图Home ({loc[0]},{loc[1]})")
         else:
-            device.tap(*FALLBACK_HOME)
-            self._log(device, f"固定坐标Home {FALLBACK_HOME}")
+            hx, hy = device.coords.get("nurture_home", FALLBACK_HOME)
+            device.tap(hx, hy)
+            self._log(device, f"固定坐标Home ({hx},{hy})")
         self.wait(2)
 
-        # 5. 向右滑动切到 For You（滑3次）
+        # 5. 向右滑动切到 For You（滑3次，起点按机型）
+        fx, fy = device.coords.get("nurture_foryou", (100, 50))
         for _ in range(3):
             if self.should_stop:
                 return
-            device.swipe_dir("right", length=0.5, sx=100, sy=50)
+            device.swipe_dir("right", length=0.5, sx=fx, sy=fy)
             time.sleep(0.5)
         self.wait(2)
         self._log(device, "已进入 For You 推荐页")
@@ -208,8 +210,9 @@ class NurtureTask(BaseTask):
         # 1. 横屏检测（刷到直播会横屏）
         self._check_landscape(device)
 
-        # 2. 上滑到下一个视频
-        device.swipe_dir("up", length=0.5, sx=200, sy=550)
+        # 2. 上滑到下一个视频（起点按机型，SE自动换算）
+        sx, sy = device.coords.get("nurture_swipe_up", (200, 550))
+        device.swipe_dir("up", length=0.5, sx=sx, sy=sy)
         self.wait(1.5)
         if self.should_stop:
             return
@@ -217,18 +220,20 @@ class NurtureTask(BaseTask):
         # 3. 点赞（按配置概率；实战流程默认每个都点）
         if random.random() < cfg.get("like_chance", 1.0):
             if self._live_mode:
-                # 直播模式：双击屏幕中心
-                device.tap(*LIVE_DOUBLE)
+                # 直播模式：双击屏幕中心（按机型）
+                dx, dy = device.coords.get("live_double", LIVE_DOUBLE)
+                device.tap(dx, dy)
                 time.sleep(0.15)
-                device.tap(*LIVE_DOUBLE)
+                device.tap(dx, dy)
                 self._log(device, "  双击点赞(直播)")
             else:
                 loc = self._find_click(device, HEART_ICON, cfg.get("guard_similarity", 0.7))
                 if loc:
                     self._log(device, f"  点赞 ({loc[0]},{loc[1]})")
                 else:
-                    device.tap(*FALLBACK_HEART)
-                    self._log(device, f"  点赞 {FALLBACK_HEART}")
+                    hx, hy = device.coords.get("nurture_heart", FALLBACK_HEART)
+                    device.tap(hx, hy)
+                    self._log(device, f"  点赞 ({hx},{hy})")
             self._likes_given += 1
 
     def _check_landscape(self, device):
@@ -236,7 +241,8 @@ class NurtureTask(BaseTask):
         try:
             land = device.is_landscape()
             if land:
-                device.tap(*LANDSCAPE_FIX)
+                lx, ly = device.coords.get("landscape_fix", LANDSCAPE_FIX)
+                device.tap(lx, ly)
                 self.wait(1.5)
                 self._live_mode = True
                 self._log(device, "检测到横屏(直播)，已切换")
