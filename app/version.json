@@ -1,0 +1,27 @@
+{
+  "app": {
+    "version": "1.1.0",
+    "changelog": "v1.1.0 首发：养号防跑飞、飞书上报、多节点+节点状态、分机型坐标、修复更新脚本中文路径",
+    "files": [
+      "automation/__init__.py",
+      "automation/app.py",
+      "automation/config.py",
+      "automation/coordinates.py",
+      "automation/device.py",
+      "automation/engine.py",
+      "automation/error_reporter.py",
+      "automation/logger.py",
+      "automation/nodes.py",
+      "automation/paths.py",
+      "automation/scheduler.py",
+      "automation/tasks/__init__.py",
+      "automation/tasks/base.py",
+      "automation/tasks/nurture.py",
+      "automation/tasks/publish.py",
+      "automation/ui_form.py",
+      "automation/updater.py",
+      "automation/version.py",
+      "automation/vision.py"
+    ]
+  }
+}
