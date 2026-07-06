@@ -17,9 +17,14 @@ DEFAULT_NURTURE_CONFIG = {
     "total_duration_min": 30,        # 养号总时长（分钟），0=无限循环直到手动停止
     "session_count": 0,              # 总共刷多少轮（0=按时间控制）
 
-    # ── 状态守卫（防止跑飞误入相册/其他App）──
+    # ── 简单模式（强烈推荐）──
+    # True 时只做最安全的动作：看视频 + 上滑 + 偶尔点赞，
+    # 关闭所有会切页面的操作（搜索/切tab/评论/看主页/关注），避免跑到 Shop 等错误页面。
+    "simple_mode": True,
+
+    # ── 状态守卫（防止跑飞误入相册/其他App/购物页）──
     "guard_enabled": True,           # 是否启用状态守卫
-    "guard_every_videos": 5,         # 每刷N个视频强制确认一次在TikTok
+    "guard_every_videos": 5,         # 每刷N个视频强制回一次推荐页
     "guard_similarity": 0.7,         # 桌面TikTok图标识别相似度
 
     # ── 刷视频参数 ──
@@ -155,8 +160,9 @@ class NurtureTask(BaseTask):
                          and self._videos_watched % cfg.get("guard_every_videos", 6) == 0)
                 self._ensure_tiktok(device, force=force)
 
-            # 搜索穿插
-            if (cfg["search_enabled"]
+            # 搜索穿插（简单模式下不搜索——搜索会切到顶部/Shop页，容易跑飞）
+            if (not cfg.get("simple_mode", True)
+                    and cfg["search_enabled"]
                     and cfg["search_keywords"]
                     and self._videos_watched > 0
                     and self._videos_watched % cfg["search_interval_videos"] == 0):
@@ -186,27 +192,28 @@ class NurtureTask(BaseTask):
         if self.should_stop:
             return
 
-        # ── 随机互动 ──
+        simple = cfg.get("simple_mode", True)
 
-        # 切换tab（小概率）
-        if random.random() < cfg["switch_tab_chance"]:
-            self._random_tab_switch(device)
+        # ── 会切页面的操作：仅在关闭简单模式时才做（这些是跑到Shop/相册的元凶）──
+        if not simple:
+            if random.random() < cfg["switch_tab_chance"]:
+                self._random_tab_switch(device)
+            if random.random() < cfg["scroll_comments_chance"]:
+                self._browse_comments(device)
+            if random.random() < cfg["profile_view_chance"]:
+                self._view_profile(device)
+            if random.random() < cfg["follow_chance"]:
+                self._do_follow(device)
 
-        # 查看评论区（小概率）
-        if random.random() < cfg["scroll_comments_chance"]:
-            self._browse_comments(device)
-
-        # 查看发布者主页
-        if random.random() < cfg["profile_view_chance"]:
-            self._view_profile(device)
-
-        # 点赞
+        # ── 点赞：安全动作，两种模式都保留 ──
+        # 简单模式下只用双击屏幕中央点赞（推荐页原生手势，不会切页面）
         if random.random() < cfg["like_chance"]:
-            self._do_like(device)
-
-        # 关注
-        if random.random() < cfg["follow_chance"]:
-            self._do_follow(device)
+            if simple:
+                self._log(device, "  -> 双击点赞")
+                device.double_tap_like()
+                self._likes_given += 1
+            else:
+                self._do_like(device)
 
         # 滑到下一个视频
         device.swipe_next_video()
@@ -261,7 +268,10 @@ class NurtureTask(BaseTask):
                 if still_home:
                     self._log(device, f"  第{attempt+1}次未成功进入，重试")
                     continue
-            self._log(device, "  已进入 TikTok")
+            # 进入后点一下底部首页tab，确保停在信息流（而非上次残留的Shop/主页）
+            device.tap_home_tab()
+            time.sleep(1.5)
+            self._log(device, "  已进入 TikTok 推荐页")
             return
         self._log(device, "  多次尝试后仍未确认进入，继续（依赖识图兜底）")
 

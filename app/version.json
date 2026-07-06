@@ -1,7 +1,7 @@
 {
   "app": {
-    "version": "1.1.0",
-    "changelog": "v1.1.0 首发：养号防跑飞、飞书上报、多节点+节点状态、分机型坐标、修复更新脚本中文路径",
+    "version": "1.1.1",
+    "changelog": "v1.1.1 养号简单模式：只做看视频+上滑+点赞，不再跑到购物页/相册",
     "files": [
       "automation/__init__.py",
       "automation/app.py",

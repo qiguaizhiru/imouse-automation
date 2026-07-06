@@ -242,8 +242,15 @@ class Ui_AutomationWindow(object):
 
         tab1.addWidget(watch_group)
 
+        # ── 简单模式开关（安全）──
+        self.check_simple_mode = QtWidgets.QCheckBox(
+            "简单模式（推荐）：只做 看视频 + 上滑 + 点赞，不切页面，最不容易跑到购物页/相册")
+        self.check_simple_mode.setChecked(True)
+        self.check_simple_mode.setStyleSheet("font-weight: bold; color: #2E7D32;")
+        tab1.addWidget(self.check_simple_mode)
+
         # ── 互动设置 ──
-        interact_group = QtWidgets.QGroupBox("互动概率")
+        interact_group = QtWidgets.QGroupBox("互动概率（简单模式下只有点赞生效，其余需取消简单模式）")
         interact_layout = QtWidgets.QGridLayout(interact_group)
         interact_layout.setSpacing(8)
 

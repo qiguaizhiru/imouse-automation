@@ -114,8 +114,10 @@ class AutomationApp(QtWidgets.QMainWindow):
         # 随机控件可用性随勾选联动
         self._ui.check_random_time.toggled.connect(self._toggle_random_time_ui)
         self._ui.check_random_duration.toggled.connect(self._toggle_random_duration_ui)
+        self._ui.check_simple_mode.toggled.connect(self._toggle_simple_mode_ui)
         self._toggle_random_time_ui(False)
         self._toggle_random_duration_ui(False)
+        self._toggle_simple_mode_ui(True)
 
         # 加载已有配置
         self._load_saved_config()
@@ -251,6 +253,7 @@ class AutomationApp(QtWidgets.QMainWindow):
             if keywords_text else []
 
         cfg = {
+            "simple_mode": ui.check_simple_mode.isChecked(),
             "total_duration_min": ui.spin_duration.value(),
             "random_duration": ui.check_random_duration.isChecked(),
             "duration_min": ui.spin_duration_min.value(),
@@ -277,6 +280,7 @@ class AutomationApp(QtWidgets.QMainWindow):
 
     def _apply_config_to_ui(self, cfg):
         ui = self._ui
+        ui.check_simple_mode.setChecked(cfg.get("simple_mode", True))
         ui.spin_duration.setValue(cfg.get("total_duration_min", 30))
         ui.check_random_duration.setChecked(cfg.get("random_duration", False))
         ui.spin_duration_min.setValue(cfg.get("duration_min", 20))
@@ -410,6 +414,7 @@ class AutomationApp(QtWidgets.QMainWindow):
 
     def _set_config_enabled(self, enabled):
         for widget in [
+            self._ui.check_simple_mode,
             self._ui.spin_duration, self._ui.spin_videos, self._ui.spin_sessions,
             self._ui.check_random_duration,
             self._ui.spin_watch_min, self._ui.spin_watch_max,
@@ -422,9 +427,10 @@ class AutomationApp(QtWidgets.QMainWindow):
             widget.setEnabled(enabled)
         for spin in self._ui._interact_spins.values():
             spin.setEnabled(enabled)
-        # 随机时长范围控件随勾选状态联动（恢复时重新应用）
+        # 恢复时重新应用联动状态
         if enabled:
             self._toggle_random_duration_ui(self._ui.check_random_duration.isChecked())
+            self._toggle_simple_mode_ui(self._ui.check_simple_mode.isChecked())
         else:
             self._ui.spin_duration_min.setEnabled(False)
             self._ui.spin_duration_max.setEnabled(False)
@@ -532,6 +538,18 @@ class AutomationApp(QtWidgets.QMainWindow):
         self._ui.spin_duration_min.setEnabled(checked)
         self._ui.spin_duration_max.setEnabled(checked)
         self._ui.label_rand_dur.setEnabled(checked)
+
+    def _toggle_simple_mode_ui(self, checked):
+        """简单模式勾选时，灰掉会切页面的互动/搜索控件（只留点赞）"""
+        ui = self._ui
+        # 简单模式下禁用：关注/评论/查看主页/浏览评论/切换Tab + 搜索
+        for key in ("follow_chance", "comment_chance", "profile_view_chance",
+                    "scroll_comments_chance", "switch_tab_chance"):
+            spin = ui._interact_spins.get(key)
+            if spin:
+                spin.setEnabled(not checked)
+        for w in (ui.check_search, ui.spin_search_interval, ui.lineEdit_keywords):
+            w.setEnabled(not checked)
 
     def _add_publish_job(self):
         device_name = self._ui.lineEdit_pub_device.text().strip()
