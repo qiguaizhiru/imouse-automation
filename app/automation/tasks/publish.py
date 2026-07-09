@@ -14,8 +14,29 @@ logger = logging.getLogger("automation.publish")
 # 媒体文件根目录（与原程序一致）
 MEDIA_BASE_DIR = r"D:\iMousePro\Shortcut\Media"
 
+# 支持的视频/图片格式（按优先级；本地文件只用于提取缩略图做识图匹配，cv2 都能读）
+VIDEO_EXTS = [".mov", ".mp4", ".m4v", ".avi", ".mkv", ".3gp", ".flv", ".wmv", ".webm"]
+IMAGE_EXTS = [".png", ".jpg", ".jpeg", ".bmp", ".webp"]
+
 # icon 目录：只读资源，打包后在程序内部
 ICON_DIR = resource_path("icon")
+
+
+def _find_media_file(device_dir, file_name, exts):
+    """在目录下按多种扩展名查找素材文件，返回完整路径或 None。
+    兼容 file_name 本身已带扩展名的情况。"""
+    # 1) file_name 已带扩展名且文件存在
+    root, ext = os.path.splitext(file_name)
+    if ext and ext.lower() in exts:
+        cand = os.path.join(device_dir, file_name)
+        if os.path.exists(cand):
+            return cand
+    # 2) 依次尝试各扩展名
+    for e in exts:
+        cand = os.path.join(device_dir, file_name + e)
+        if os.path.exists(cand):
+            return cand
+    return None
 
 DEFAULT_PUBLISH_CONFIG = {
     "media_base_dir": MEDIA_BASE_DIR,
@@ -67,9 +88,12 @@ class PublishTask(BaseTask):
                 raise FileNotFoundError(f"找不到图片素材: {file_name}")
             ok = self._publish_image(device, template_bytes)
         elif media_type == "video":
-            video_path = os.path.join(device_dir, file_name + ".mov")
-            if not os.path.exists(video_path):
-                raise FileNotFoundError(f"找不到视频文件: {video_path}")
+            video_path = _find_media_file(device_dir, file_name, VIDEO_EXTS)
+            if not video_path:
+                raise FileNotFoundError(
+                    f"找不到视频文件: {os.path.join(device_dir, file_name)}"
+                    f"（支持 {'/'.join(e[1:] for e in VIDEO_EXTS)}）")
+            self._log(device, f"找到视频: {os.path.basename(video_path)}")
             template_bytes = self._extract_video_thumbnail(device, video_path)
             if template_bytes is None:
                 raise RuntimeError("无法提取视频缩略图")
@@ -270,12 +294,7 @@ class PublishTask(BaseTask):
             self._log(device, "缺少 PIL 库")
             return None
 
-        img_path = None
-        for ext in [".png", ".jpg", ".jpeg", ".bmp"]:
-            candidate = os.path.join(device_dir, file_name + ext)
-            if os.path.exists(candidate):
-                img_path = candidate
-                break
+        img_path = _find_media_file(device_dir, file_name, IMAGE_EXTS)
         if not img_path:
             return None
 
