@@ -526,6 +526,10 @@ class AutomationApp(QtWidgets.QMainWindow):
         )
         self._scheduler.load_jobs()
         self._refresh_jobs_table()
+        # 调度器随程序常驻运行：添加任务到点即自动发布，无需手动点"启动"
+        self._scheduler.start()
+        self._ui.button_start_scheduler.setEnabled(False)
+        self._ui.button_stop_scheduler.setEnabled(True)
 
     def _toggle_random_time_ui(self, checked):
         """随机时间勾选时启用结束时间，并把'发布时间'标签改为'起始时间'语义"""
@@ -629,18 +633,13 @@ class AutomationApp(QtWidgets.QMainWindow):
             QMessageBox.warning(self, "导入失败", str(e))
 
     def _start_scheduler(self):
-        jobs = self._scheduler.get_jobs()
-        pending = [j for j in jobs if j.status == PublishJob.STATUS_PENDING]
-        if not pending:
-            QMessageBox.warning(self, "提示", "没有待发布的任务")
-            return
-        # 确保引擎已启动
-        if not self._scheduler.engine._running:
-            self._scheduler.engine.start()
+        # 调度器已随程序常驻；此按钮用于"停止后重新启动"
         self._scheduler.start()
         self._ui.button_start_scheduler.setEnabled(False)
         self._ui.button_stop_scheduler.setEnabled(True)
-        self._log(f"定时发布已启动，待发布 {len(pending)} 条")
+        pending = [j for j in self._scheduler.get_jobs()
+                   if j.status == PublishJob.STATUS_PENDING]
+        self._log(f"定时发布运行中，待发布 {len(pending)} 条")
 
     def _stop_scheduler(self):
         if self._scheduler:

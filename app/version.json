@@ -1,7 +1,7 @@
 {
   "app": {
-    "version": "1.1.4",
-    "changelog": "v1.1.4 视频发布兼容mp4等主流格式(不再只限mov)",
+    "version": "1.1.5",
+    "changelog": "v1.1.5 定时发布调度器随程序自动运行(不用再手动点启动),找不到设备时保持等待并提示",
     "files": [
       "automation/__init__.py",
       "automation/app.py",

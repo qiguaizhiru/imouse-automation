@@ -107,6 +107,7 @@ class PublishScheduler:
         self._thread = None
         self._running = False
         self._active = {}  # device_name -> job_id (正在执行)
+        self._warned_missing = set()  # 已提示过"找不到设备"的 job_id（避免刷屏）
 
     # ── 任务管理 ──
 
@@ -229,10 +230,19 @@ class PublishScheduler:
 
             device = self._resolve_device(job, all_devices)
             if not device:
-                self._set_status(job, PublishJob.STATUS_FAILED, "设备未连接")
-                self._log(f"[{job.node_name}/{job.device_name}] 设备未连接，跳过: {job.file}")
+                # 设备暂时找不到：保持等待，下轮重试（可能设备还没连上），
+                # 在信息列显示原因；只在日志提示一次并附上在线设备名，方便排查。
+                if job.message != "等待设备连接":
+                    job.message = "等待设备连接"
+                    self._notify_update()
+                if job.job_id not in self._warned_missing:
+                    self._warned_missing.add(job.job_id)
+                    names = "、".join(sorted({d.name for d in all_devices})) or "（无）"
+                    self._log(f"[提示] 找不到设备「{job.device_name}」，任务[{job.file}]保持等待。"
+                              f"当前在线设备: {names}（请确认设备名填对、设备在线）")
                 continue
 
+            self._warned_missing.discard(job.job_id)
             self._active[active_key] = job.job_id
             self._set_status(job, PublishJob.STATUS_RUNNING, "")
             self._log(f"[{device.node_name}/{device.name}] 开始定时发布: {job.file} ({job.media_type})")

@@ -411,7 +411,7 @@ class NurtureTask(BaseTask):
         if not force:
             # 轻量检测：屏幕上出现桌面 TikTok 图标 = 已回到桌面（跑飞前兆）
             if device.find_image_file(TIKTOK_ICON, sim):
-                self._log(device, "⚠ 检测到回到桌面，重新打开 TikTok")
+                self._log(device, "[提示] 检测到回到桌面，重新打开 TikTok")
                 self._open_tiktok(device)
             return
 
