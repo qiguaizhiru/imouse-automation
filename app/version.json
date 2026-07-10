@@ -1,7 +1,7 @@
 {
   "app": {
     "version": "1.1.6",
-    "changelog": "v1.1.6 发布类型兼容中文(图文/视频),不再报未知媒体类型",
+    "changelog": "测试一键发布脚本(no-op)",
     "files": [
       "automation/__init__.py",
       "automation/app.py",
