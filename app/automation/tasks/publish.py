@@ -22,6 +22,16 @@ IMAGE_EXTS = [".png", ".jpg", ".jpeg", ".bmp", ".webp"]
 ICON_DIR = resource_path("icon")
 
 
+def _normalize_media_type(t):
+    """规范化媒体类型，兼容中英文/大小写。返回 'picture' / 'video' / 原值"""
+    s = str(t).strip().lower()
+    if s in ("picture", "pic", "image", "img", "photo", "图文", "图片", "图", "照片"):
+        return "picture"
+    if s in ("video", "vid", "movie", "视频", "影片", "片"):
+        return "video"
+    return s
+
+
 def _find_media_file(device_dir, file_name, exts):
     """在目录下按多种扩展名查找素材文件，返回完整路径或 None。
     兼容 file_name 本身已带扩展名的情况。"""
@@ -74,7 +84,7 @@ class PublishTask(BaseTask):
 
     def run(self, device):
         cfg = self.config
-        media_type = str(cfg.get("type", "picture")).strip().lower()
+        media_type = _normalize_media_type(cfg.get("type", "picture"))
         device_name = cfg.get("device_name") or device.name
         file_name = str(cfg.get("file", "")).strip()
 

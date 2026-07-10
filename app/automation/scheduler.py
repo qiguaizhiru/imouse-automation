@@ -159,6 +159,7 @@ class PublishScheduler:
     def import_from_excel(self, path):
         """从 Excel 导入定时任务（列: devices|file|type|url|title|description|scheduled_time）"""
         import pandas as pd
+        from .tasks.publish import _normalize_media_type
         df = pd.read_excel(path)
         count = 0
         for _, row in df.iterrows():
@@ -171,7 +172,7 @@ class PublishScheduler:
                 job = PublishJob(
                     device_name=str(row.get("devices", "")).strip(),
                     file=str(row.get("file", "")).strip(),
-                    media_type=str(row.get("type", "picture")).strip().lower(),
+                    media_type=_normalize_media_type(row.get("type", "picture")),
                     scheduled_time=st,
                     url=str(row.get("url", "")) if not pd.isna(row.get("url", "")) else "",
                     title=str(row.get("title", "")) if not pd.isna(row.get("title", "")) else "",
