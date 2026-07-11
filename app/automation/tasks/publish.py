@@ -34,16 +34,29 @@ def _normalize_media_type(t):
 
 def _find_media_file(device_dir, file_name, exts):
     """在目录下按多种扩展名查找素材文件，返回完整路径或 None。
-    兼容 file_name 本身已带扩展名的情况。"""
-    # 1) file_name 已带扩展名且文件存在
-    root, ext = os.path.splitext(file_name)
+    兼容多种填法：纯文件名(77)、带扩展名(77.jpg)、甚至误填了完整路径。"""
+    file_name = str(file_name).strip().strip('"').strip("'")
+    if not file_name:
+        return None
+
+    # 0) 本身就是一个存在的完整文件路径 → 直接用
+    if os.path.isfile(file_name):
+        return file_name
+
+    # 1) 只取文件名部分（用户可能误填了完整路径或带了目录）
+    base = os.path.basename(file_name.replace("\\", "/").rstrip("/"))
+    root, ext = os.path.splitext(base)
+
+    # 2) base 已带素材扩展名且存在
     if ext and ext.lower() in exts:
-        cand = os.path.join(device_dir, file_name)
+        cand = os.path.join(device_dir, base)
         if os.path.exists(cand):
             return cand
-    # 2) 依次尝试各扩展名
+
+    # 3) base（去掉可能的非素材扩展名）+ 依次尝试各扩展名
+    stem = root if (ext and ext.lower() not in exts) else base
     for e in exts:
-        cand = os.path.join(device_dir, file_name + e)
+        cand = os.path.join(device_dir, stem + e)
         if os.path.exists(cand):
             return cand
     return None
