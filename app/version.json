@@ -1,7 +1,7 @@
 {
   "app": {
-    "version": "1.1.8",
-    "changelog": "发布素材文件名兼容:填纯文件名/带扩展名/甚至误填完整路径都能找到图片",
+    "version": "1.1.9",
+    "changelog": "定时发布新增[选图片/视频]和[选整个文件夹]按钮,直接选文件自动按文件夹名识别设备,不用敲文件名",
     "files": [
       "automation/__init__.py",
       "automation/app.py",

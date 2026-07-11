@@ -82,6 +82,8 @@ class AutomationApp(QtWidgets.QMainWindow):
         # 定时发布 Tab
         self._ui.button_add_job.clicked.connect(self._add_publish_job)
         self._ui.button_import_jobs.clicked.connect(self._import_jobs_excel)
+        self._ui.button_pick_files.clicked.connect(self._pick_files)
+        self._ui.button_pick_folder.clicked.connect(self._pick_folder)
         self._ui.button_start_scheduler.clicked.connect(self._start_scheduler)
         self._ui.button_stop_scheduler.clicked.connect(self._stop_scheduler)
         self._ui.button_del_job.clicked.connect(self._delete_selected_job)
@@ -631,6 +633,97 @@ class AutomationApp(QtWidgets.QMainWindow):
         except Exception as e:
             self._log(f"导入失败: {e}")
             QMessageBox.warning(self, "导入失败", str(e))
+
+    # ── 直接选素材文件/文件夹生成任务 ──
+
+    def _compute_sched_time(self):
+        """按界面时间设置返回一个发布时刻（固定 或 时间段内随机）"""
+        from datetime import timedelta
+        start_dt = self._ui.dateTime_pub.dateTime().toPyDateTime()
+        if not self._ui.check_random_time.isChecked():
+            return start_dt
+        end_dt = self._ui.dateTime_pub_end.dateTime().toPyDateTime()
+        if end_dt <= start_dt:
+            return start_dt
+        span = (end_dt - start_dt).total_seconds()
+        return (start_dt + timedelta(seconds=random.uniform(0, span))).replace(microsecond=0)
+
+    def _pick_files(self):
+        from .tasks.publish import IMAGE_EXTS, VIDEO_EXTS, MEDIA_BASE_DIR
+        allexts = " ".join("*" + e for e in (IMAGE_EXTS + VIDEO_EXTS))
+        start_dir = MEDIA_BASE_DIR if os.path.isdir(MEDIA_BASE_DIR) else ""
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, "选择图片/视频（可多选）", start_dir, f"素材文件 ({allexts})")
+        if paths:
+            self._add_jobs_from_paths(paths)
+
+    def _pick_folder(self):
+        from .tasks.publish import IMAGE_EXTS, VIDEO_EXTS, MEDIA_BASE_DIR
+        start_dir = MEDIA_BASE_DIR if os.path.isdir(MEDIA_BASE_DIR) else ""
+        folder = QFileDialog.getExistingDirectory(self, "选择素材文件夹（含子文件夹）", start_dir)
+        if not folder:
+            return
+        exts = set(IMAGE_EXTS) | set(VIDEO_EXTS)
+        paths = []
+        for dp, _, fs in os.walk(folder):
+            for fn in fs:
+                if os.path.splitext(fn)[1].lower() in exts:
+                    paths.append(os.path.join(dp, fn))
+        if not paths:
+            QMessageBox.warning(self, "提示", "该文件夹（含子文件夹）里没有找到图片/视频素材")
+            return
+        self._add_jobs_from_paths(paths)
+
+    def _add_jobs_from_paths(self, paths):
+        """根据选中的素材文件路径批量生成任务：
+        设备名=文件所在文件夹名，文件名=文件名，类型=按扩展名自动判断。"""
+        from .tasks.publish import IMAGE_EXTS, VIDEO_EXTS
+        url = self._ui.lineEdit_pub_url.text().strip()
+        title = self._ui.lineEdit_pub_title.text().strip()
+        desc = self._ui.lineEdit_pub_desc.text().strip()
+
+        media = []
+        has_picture = False
+        for p in paths:
+            ext = os.path.splitext(p)[1].lower()
+            if ext in IMAGE_EXTS:
+                mtype = "picture"; has_picture = True
+            elif ext in VIDEO_EXTS:
+                mtype = "video"
+            else:
+                continue
+            device_name = os.path.basename(os.path.dirname(p))  # 父文件夹名=设备
+            file = os.path.basename(p)                          # 文件名（带扩展名）
+            media.append((device_name, file, mtype))
+
+        if not media:
+            QMessageBox.warning(self, "提示", "选中的文件里没有可用的图片/视频")
+            return
+
+        # 图文没填音乐URL时确认一次
+        if has_picture and not url:
+            reply = QMessageBox.question(
+                self, "确认", f"选中的图文没有填音乐URL，确定继续吗？\n"
+                              f"（TikTok图文通常需要配音乐，可在上方音乐URL框统一填）",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No)
+            if reply == QMessageBox.StandardButton.No:
+                return
+
+        for device_name, file, mtype in media:
+            job = PublishJob(
+                device_name=device_name, node_name="", file=file, media_type=mtype,
+                scheduled_time=self._compute_sched_time(),
+                url=url, title=title, description=desc,
+            )
+            self._scheduler.add_job(job)
+
+        devs = sorted({m[0] for m in media})
+        self._log(f"已从素材生成 {len(media)} 条任务，涉及设备: {'、'.join(devs)}")
+        QMessageBox.information(
+            self, "已添加",
+            f"成功生成 {len(media)} 条发布任务\n设备: {'、'.join(devs[:20])}"
+            + ("..." if len(devs) > 20 else ""))
 
     def _start_scheduler(self):
         # 调度器已随程序常驻；此按钮用于"停止后重新启动"

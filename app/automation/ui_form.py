@@ -443,18 +443,37 @@ class Ui_AutomationWindow(object):
             "padding: 6px 14px; border: none; border-radius: 3px; }")
         pub_add_btn_layout.addWidget(self.button_add_job)
 
+        # 直接选素材（不用敲文件名，自动按所在文件夹名识别设备）
+        self.button_pick_files = QtWidgets.QPushButton("选图片/视频")
+        self.button_pick_files.setStyleSheet(
+            "QPushButton { background-color: #4CAF50; color: white; font-weight: bold; "
+            "padding: 6px 14px; border: none; border-radius: 3px; }")
+        self.button_pick_files.setToolTip(
+            "打开文件夹多选图片/视频，自动按文件所在的设备文件夹名生成任务")
+        pub_add_btn_layout.addWidget(self.button_pick_files)
+
+        self.button_pick_folder = QtWidgets.QPushButton("选整个文件夹")
+        self.button_pick_folder.setStyleSheet(
+            "QPushButton { background-color: #4CAF50; color: white; font-weight: bold; "
+            "padding: 6px 14px; border: none; border-radius: 3px; }")
+        self.button_pick_folder.setToolTip(
+            "选一个文件夹，自动扫描里面所有图片/视频（含子文件夹）批量生成任务")
+        pub_add_btn_layout.addWidget(self.button_pick_folder)
+
         self.button_import_jobs = QtWidgets.QPushButton("从Excel导入")
         self.button_import_jobs.setStyleSheet(
             "QPushButton { background-color: #455A64; color: white; font-weight: bold; "
             "padding: 6px 14px; border: none; border-radius: 3px; }")
         pub_add_btn_layout.addWidget(self.button_import_jobs)
 
-        self.label_excel_fmt = QtWidgets.QLabel(
-            "Excel列: devices | file | type | url | title | description | scheduled_time")
-        self.label_excel_fmt.setStyleSheet("color: #888; font-size: 11px;")
-        pub_add_btn_layout.addWidget(self.label_excel_fmt)
         pub_add_btn_layout.addStretch()
         add_layout.addLayout(pub_add_btn_layout, 6, 0, 1, 4)
+
+        self.label_excel_fmt = QtWidgets.QLabel(
+            "选图片/视频：自动按文件所在文件夹名识别设备（如 Media\\77\\77.jpg → 设备77）。"
+            "或手填设备名+素材名。Excel列: devices|file|type|url|title|description|scheduled_time")
+        self.label_excel_fmt.setStyleSheet("color: #888; font-size: 11px;")
+        add_layout.addWidget(self.label_excel_fmt, 7, 0, 1, 4)
 
         tabp.addWidget(add_group)
 
