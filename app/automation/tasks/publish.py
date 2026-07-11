@@ -48,6 +48,27 @@ def _find_media_file(device_dir, file_name, exts):
             return cand
     return None
 
+
+def _not_found_msg(device_dir, file_name, exts, kind="素材"):
+    """生成可诊断的"找不到文件"提示：显示查找目录、文件名、目录里实际有什么。"""
+    parts = [f"找不到{kind}: 目录[{device_dir}] 里没有名为「{file_name}」"
+             f"({'/'.join(e[1:] for e in exts)})的文件"]
+    if not os.path.isdir(device_dir):
+        parts.append(f"（该目录不存在，请确认设备名对应的文件夹已建立）")
+    else:
+        try:
+            files = [f for f in os.listdir(device_dir)
+                     if os.path.splitext(f)[1].lower() in exts]
+            if files:
+                parts.append(f"目录里现有: {', '.join(files[:8])}"
+                             + ("..." if len(files) > 8 else ""))
+            else:
+                parts.append("（目录里没有任何匹配格式的文件）")
+        except Exception:
+            pass
+    return "；".join(parts)
+
+
 DEFAULT_PUBLISH_CONFIG = {
     "media_base_dir": MEDIA_BASE_DIR,
     "icon_dir": ICON_DIR,
@@ -95,14 +116,14 @@ class PublishTask(BaseTask):
         if media_type == "picture":
             template_bytes = self._make_image_template(device, device_dir, file_name)
             if template_bytes is None:
-                raise FileNotFoundError(f"找不到图片素材: {file_name}")
+                raise FileNotFoundError(
+                    _not_found_msg(device_dir, file_name, IMAGE_EXTS, "图片素材"))
             ok = self._publish_image(device, template_bytes)
         elif media_type == "video":
             video_path = _find_media_file(device_dir, file_name, VIDEO_EXTS)
             if not video_path:
                 raise FileNotFoundError(
-                    f"找不到视频文件: {os.path.join(device_dir, file_name)}"
-                    f"（支持 {'/'.join(e[1:] for e in VIDEO_EXTS)}）")
+                    _not_found_msg(device_dir, file_name, VIDEO_EXTS, "视频文件"))
             self._log(device, f"找到视频: {os.path.basename(video_path)}")
             template_bytes = self._extract_video_thumbnail(device, video_path)
             if template_bytes is None:

@@ -1,7 +1,7 @@
 {
   "app": {
-    "version": "1.1.6",
-    "changelog": "测试一键发布脚本(no-op)",
+    "version": "1.1.7",
+    "changelog": "养号改用原生识图(不再本地cv误匹配)+点赞找不到爱心时改双击中心(不会误开主页);发布素材找不到时显示目录内容便于排查",
     "files": [
       "automation/__init__.py",
       "automation/app.py",

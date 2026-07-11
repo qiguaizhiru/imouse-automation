@@ -219,21 +219,24 @@ class NurtureTask(BaseTask):
 
         # 3. 点赞（按配置概率；实战流程默认每个都点）
         if random.random() < cfg.get("like_chance", 1.0):
+            dx, dy = device.coords.get("live_double", LIVE_DOUBLE)
             if self._live_mode:
-                # 直播模式：双击屏幕中心（按机型）
-                dx, dy = device.coords.get("live_double", LIVE_DOUBLE)
+                # 直播模式：双击屏幕中心
                 device.tap(dx, dy)
                 time.sleep(0.15)
                 device.tap(dx, dy)
                 self._log(device, "  双击点赞(直播)")
             else:
+                # 先识图找爱心（原生识图，准）；找不到就双击屏幕中心兜底
+                # （双击中心是安全的点赞手势，不会误点到头像/评论导致跳出推荐页）
                 loc = self._find_click(device, HEART_ICON, cfg.get("guard_similarity", 0.7))
                 if loc:
                     self._log(device, f"  点赞 ({loc[0]},{loc[1]})")
                 else:
-                    hx, hy = device.coords.get("nurture_heart", FALLBACK_HEART)
-                    device.tap(hx, hy)
-                    self._log(device, f"  点赞 ({hx},{hy})")
+                    device.tap(dx, dy)
+                    time.sleep(0.15)
+                    device.tap(dx, dy)
+                    self._log(device, "  双击点赞(未识别爱心，用中心双击)")
             self._likes_given += 1
 
     def _check_landscape(self, device):
@@ -252,10 +255,10 @@ class NurtureTask(BaseTask):
             pass
 
     def _find_click(self, device, icon_path, sim):
-        """识图找到并点击，返回坐标或 None"""
+        """识图找到并点击（用 iMouse 原生识图，与验证过的养号一致），返回坐标或 None"""
         if not os.path.exists(icon_path):
             return None
-        loc = device.find_image_file(icon_path, sim)
+        loc = device.find_image_file_native(icon_path, sim)
         if loc:
             device.tap(loc[0], loc[1])
             time.sleep(0.5)

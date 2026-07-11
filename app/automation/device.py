@@ -130,10 +130,11 @@ class Device:
             return None
 
     def open_url(self, url):
+        # devlist 传空（与验证过的养号流程一致），只对 deviceid 生效
         logger.debug(f"[{self.name}] open_url: {url}")
         return self._post("shortcut", {
             "deviceid": self.device_id, "id": 13,
-            "devlist": [self.device_id],
+            "devlist": [],
             "parameter": json.dumps({"url": url}),
             "outtime": 30000,
         })
@@ -194,16 +195,9 @@ class Device:
             return r.get("data", {})
         return None
 
-    def find_image(self, img_b64, similarity=0.8, rect=None):
-        """查找图片：优先本地 OpenCV 模板匹配（更准），失败回退 iMouse 原生识图
-
-        返回 (x, y, confidence)，坐标已换算为【逻辑坐标系】可直接用于 tap。
-        """
-        # 第一层：本地 cv 匹配（截图 + 本地模板匹配）
-        local = self._find_image_local(img_b64, similarity, rect)
-        if local:
-            return local
-        # 第二层：iMouse 原生识图
+    def find_image_native(self, img_b64, similarity=0.7, rect=None):
+        """iMouse 原生识图（服务端匹配），返回 (x, y, conf) 或 None。
+        与验证过的养号流程一致，不做本地cv匹配，避免误匹配 + 减少截图。"""
         data = {
             "deviceid": self.device_id,
             "img": img_b64, "similarity": similarity,
@@ -217,6 +211,14 @@ class Device:
             if result and len(result) >= 2:
                 return (result[0], result[1], rd.get("confidence", 0))
         return None
+
+    def find_image(self, img_b64, similarity=0.8, rect=None):
+        """查找图片：优先本地 OpenCV 模板匹配，失败回退 iMouse 原生识图。
+        （发布流程用；养号用 find_image_native 更稳）"""
+        local = self._find_image_local(img_b64, similarity, rect)
+        if local:
+            return local
+        return self.find_image_native(img_b64, similarity, rect)
 
     def _find_image_local(self, img_b64, similarity, rect):
         """本地识图：截图 -> cv 模板匹配 -> 截图坐标换算回逻辑坐标"""
@@ -262,6 +264,15 @@ class Device:
         with open(image_path, "rb") as f:
             img_b64 = base64.b64encode(f.read()).decode()
         return self.find_image(img_b64, similarity)
+
+    def find_image_file_native(self, image_path, similarity=0.7):
+        """从本地文件读模板图，用 iMouse 原生识图查找（养号用，更稳）"""
+        if not os.path.exists(image_path):
+            logger.warning(f"[{self.name}] 模板图不存在: {image_path}")
+            return None
+        with open(image_path, "rb") as f:
+            img_b64 = base64.b64encode(f.read()).decode()
+        return self.find_image_native(img_b64, similarity)
 
     def find_image_bytes(self, img_bytes, similarity=0.7):
         """从字节数据查找模板图，返回 (x, y, conf) 或 None"""
