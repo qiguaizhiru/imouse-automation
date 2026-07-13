@@ -59,6 +59,14 @@ def _find_media_file(device_dir, file_name, exts):
         cand = os.path.join(device_dir, stem + e)
         if os.path.exists(cand):
             return cand
+
+    # 4) 按名字没匹配上，但设备文件夹里恰好只有一个该类型素材 → 直接用它
+    #    （方便"一个设备文件夹放一个文件、名字随意"的用法）
+    if os.path.isdir(device_dir):
+        cands = [f for f in os.listdir(device_dir)
+                 if os.path.splitext(f)[1].lower() in exts]
+        if len(cands) == 1:
+            return os.path.join(device_dir, cands[0])
     return None
 
 
@@ -145,12 +153,9 @@ class PublishTask(BaseTask):
         else:
             raise ValueError(f"未知的媒体类型: {media_type}")
 
+        # 各发布步骤失败时会抛出具体原因的异常；能走到这里即成功
         self.result = ok
-        if ok:
-            self._log(device, "发布成功")
-        else:
-            self._log(device, "发布失败（流程未完成）")
-            raise RuntimeError("发布流程未完成")
+        self._log(device, "发布成功")
 
     # ═══════════════════════════════════════════
     # 图文发布（与 _open_tiktok_app_with_data 一致）
@@ -165,8 +170,8 @@ class PublishTask(BaseTask):
         description = cfg.get("description", "")
 
         if not url:
-            self._log(device, "音乐URL为空，图文模式需要URL，跳过")
-            return False
+            raise RuntimeError("图文发布失败：没填音乐URL（TikTok图文需要配音乐，"
+                               "请在音乐URL框填写）")
 
         # 1. 返回主屏幕
         self._log(device, "返回主屏幕...")
@@ -182,20 +187,19 @@ class PublishTask(BaseTask):
         self._log(device, f"打开音乐URL: {url}")
         ret = device.open_url(url)
         if ret and ret.get("status", -1) not in (0, 200):
-            self._log(device, f"URL打开失败: {ret.get('message', '未知')}")
-            return False
+            raise RuntimeError(f"图文发布失败：音乐URL打开失败({ret.get('message', '未知')})")
         self.wait(10)
 
         # 4. 点击 Use sound
         if not self._find_and_click(device, "usesound.bmp", sim):
-            self._log(device, "未找到 Use sound")
-            return False
+            raise RuntimeError("图文发布失败：没找到 Use sound 按钮"
+                               "（可能音乐URL没正常打开，或TikTok界面变了）")
 
         # 5. 查找并点击封面图（在相册中）
         self._log(device, "查找封面图...")
         if not self._find_and_click_bytes(device, template_bytes, sim):
-            self._log(device, "未找到封面图")
-            return False
+            raise RuntimeError("图文发布失败：在相册里没找到这张图"
+                               "（请确认图片已上传到手机相册）")
         self.wait(3)
 
         # 6. 点击 next 两次
@@ -209,8 +213,7 @@ class PublishTask(BaseTask):
 
         # 8. 点击 post
         if not self._find_and_click(device, "post.bmp", sim):
-            self._log(device, "未找到 post 按钮")
-            return False
+            raise RuntimeError("图文发布失败：没找到发布(Post)按钮")
 
         return True
 
@@ -237,14 +240,14 @@ class PublishTask(BaseTask):
         # 3. 点击 + 按钮（先白后黑）
         if not self._find_and_click(device, "+white.bmp", sim, required=False):
             if not self._find_and_click(device, "+black.bmp", sim):
-                self._log(device, "未找到 + 按钮")
-                return False
+                raise RuntimeError("视频发布失败：没找到发布(+)按钮"
+                                   "（可能没打开TikTok首页，或TikTok界面已更新导致图标识别不到）")
 
         # 4. 查找并点击视频缩略图
         self._log(device, "查找视频缩略图...")
         if not self._find_and_click_bytes(device, template_bytes, sim):
-            self._log(device, "未找到视频")
-            return False
+            raise RuntimeError("视频发布失败：在相册里没找到这个视频"
+                               "（请确认视频已上传到手机相册；或视频封面和相册里的不一致）")
         self.wait(3)
 
         # 5. 点击 next 两次
@@ -265,8 +268,8 @@ class PublishTask(BaseTask):
 
         # 7. 点击 post
         if not self._find_and_click(device, "post.bmp", sim):
-            self._log(device, "未找到 post 按钮")
-            return False
+            raise RuntimeError("视频发布失败：没找到发布(Post)按钮"
+                               "（可能卡在上一步，或Post按钮位置/图标变了）")
 
         return True
 
