@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 # TikTok 发布任务 - 图文/视频发布，方法与原 iMouse Pro 完全一致
 
+import base64
 import io
 import os
 import time
 import logging
 
 from .base import BaseTask
-from ..paths import resource_path
+from ..paths import resource_path, data_path
 
 logger = logging.getLogger("automation.publish")
 
@@ -192,14 +193,15 @@ class PublishTask(BaseTask):
 
         # 4. 点击 Use sound
         if not self._find_and_click(device, "usesound.bmp", sim):
-            raise RuntimeError("图文发布失败：没找到 Use sound 按钮"
-                               "（可能音乐URL没正常打开，或TikTok界面变了）")
+            self._fail(device, "usesound_fail",
+                       "图文发布失败：没找到 Use sound 按钮"
+                       "（可能音乐URL没正常打开进音乐页，或TikTok界面变了）")
 
         # 5. 查找并点击封面图（在相册中）
         self._log(device, "查找封面图...")
         if not self._find_and_click_bytes(device, template_bytes, sim):
-            raise RuntimeError("图文发布失败：在相册里没找到这张图"
-                               "（请确认图片已上传到手机相册）")
+            self._fail(device, "cover_fail",
+                       "图文发布失败：在相册里没找到这张图（请确认图片已上传到手机相册）")
         self.wait(3)
 
         # 6. 点击 next 两次
@@ -213,7 +215,7 @@ class PublishTask(BaseTask):
 
         # 8. 点击 post
         if not self._find_and_click(device, "post.bmp", sim):
-            raise RuntimeError("图文发布失败：没找到发布(Post)按钮")
+            self._fail(device, "post_fail", "图文发布失败：没找到发布(Post)按钮")
 
         return True
 
@@ -240,14 +242,16 @@ class PublishTask(BaseTask):
         # 3. 点击 + 按钮（先白后黑）
         if not self._find_and_click(device, "+white.bmp", sim, required=False):
             if not self._find_and_click(device, "+black.bmp", sim):
-                raise RuntimeError("视频发布失败：没找到发布(+)按钮"
-                                   "（可能没打开TikTok首页，或TikTok界面已更新导致图标识别不到）")
+                self._fail(device, "plus_fail",
+                           "视频发布失败：没找到发布(+)按钮"
+                           "（可能没打开TikTok首页，或TikTok界面已更新导致图标识别不到）")
 
         # 4. 查找并点击视频缩略图
         self._log(device, "查找视频缩略图...")
         if not self._find_and_click_bytes(device, template_bytes, sim):
-            raise RuntimeError("视频发布失败：在相册里没找到这个视频"
-                               "（请确认视频已上传到手机相册；或视频封面和相册里的不一致）")
+            self._fail(device, "video_fail",
+                       "视频发布失败：在相册里没找到这个视频"
+                       "（请确认视频已上传到手机相册；或视频封面和相册里的不一致）")
         self.wait(3)
 
         # 5. 点击 next 两次
@@ -268,8 +272,9 @@ class PublishTask(BaseTask):
 
         # 7. 点击 post
         if not self._find_and_click(device, "post.bmp", sim):
-            raise RuntimeError("视频发布失败：没找到发布(Post)按钮"
-                               "（可能卡在上一步，或Post按钮位置/图标变了）")
+            self._fail(device, "post_fail",
+                       "视频发布失败：没找到发布(Post)按钮"
+                       "（可能卡在上一步，或Post按钮位置/图标变了）")
 
         return True
 
@@ -304,6 +309,32 @@ class PublishTask(BaseTask):
         self._log(device, f"输入文本: {text[:30]}")
         device.send_text(text)
         self.wait(1)
+
+    def _save_debug_shot(self, device, tag):
+        """发布失败时把当时的手机画面截图存到 debug 目录，方便排查是哪一步、什么界面。
+        返回文件路径或 None。"""
+        try:
+            b64 = device.screenshot_b64()
+            if not b64:
+                return None
+            shot_dir = data_path("debug")
+            os.makedirs(shot_dir, exist_ok=True)
+            safe = str(device.name).replace("/", "_").replace("\\", "_")
+            fn = f"{safe}_{tag}_{time.strftime('%Y%m%d_%H%M%S')}.jpg"
+            path = os.path.join(shot_dir, fn)
+            with open(path, "wb") as f:
+                f.write(base64.b64decode(b64))
+            self._log(device, f"已保存失败截图: {path}")
+            return path
+        except Exception:
+            return None
+
+    def _fail(self, device, tag, msg):
+        """统一的失败处理：截图 + 抛出带截图路径的异常"""
+        shot = self._save_debug_shot(device, tag)
+        if shot:
+            msg += f"（已存失败截图: {shot}）"
+        raise RuntimeError(msg)
 
     def _find_icon(self, device, icon_name, sim):
         path = _icon(self.config, icon_name)
