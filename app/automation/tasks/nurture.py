@@ -117,8 +117,11 @@ class NurtureTask(BaseTask):
         self._log(device, "开始养号流程" + ("（简单模式）" if simple else "（完整模式）"))
         self._update_progress()
 
-        # 初始化：打开 TikTok 并进入 For You 推荐页（验证过的流程）
-        self._init_device(device)
+        # 初始化：打开 TikTok 并确认真的进入了（进不去就跳过，绝不在桌面盲操作）
+        if not self._init_device(device):
+            self._log(device, "未能确认进入 TikTok，结束该设备养号（避免在桌面/通知中心误操作）")
+            self._update_progress()
+            return
 
         if simple:
             # ── 简单模式：连续刷视频（忠实复刻实战养号流程）──
@@ -159,42 +162,69 @@ class NurtureTask(BaseTask):
     # ═══════════════════════════════════════════
 
     def _init_device(self, device):
-        """初始化：回主屏 → 打开TikTok → 横屏检测 → 点Home → 右滑到For You"""
+        """初始化并确认进入 TikTok。返回 True=确认进入，False=多次尝试仍进不去。
+
+        关键：只有识图确认到 TikTok 底部 Home 图标（说明真在 TikTok 里）才继续，
+        否则重试打开；始终确认不到就返回 False，绝不在桌面盲点/盲滑（避免拉出通知中心）。
+        """
         cfg = self.config
         sim = cfg.get("guard_similarity", 0.7)
+        has_home = os.path.exists(HOME_ICON)
+        has_tiktok = os.path.exists(TIKTOK_ICON)
 
-        # 1. 回主屏幕
-        self._log(device, "回到主屏幕")
-        device.press_home()
-        self.wait(2)
-
-        # 2. 打开 TikTok（用 tiktok:// scheme，验证过的方式）
-        self._log(device, "打开 TikTok")
-        device.open_url(TIKTOK_SCHEME)
-        self.wait(5)
-
-        # 3. 横屏检测 → 直播模式
-        self._check_landscape(device)
-
-        # 4. 点击底部 Home（识图优先，兜底固定坐标——按机型取，SE自动换算）
-        loc = self._find_click(device, HOME_ICON, sim)
-        if loc:
-            self._log(device, f"识图Home ({loc[0]},{loc[1]})")
-        else:
+        # 没有识图模板时，退回尽力而为（打开+点固定Home，但绝不做危险的顶部右滑）
+        if not has_home:
+            device.press_home()
+            self.wait(2)
+            device.open_url(TIKTOK_SCHEME)
+            self.wait(5)
+            self._check_landscape(device)
             hx, hy = device.coords.get("nurture_home", FALLBACK_HOME)
             device.tap(hx, hy)
-            self._log(device, f"固定坐标Home ({hx},{hy})")
-        self.wait(2)
+            self.wait(2)
+            self._log(device, "无识图模板，已尽力打开TikTok（未识图确认）")
+            return True
 
-        # 5. 向右滑动切到 For You（滑3次，起点按机型）
-        fx, fy = device.coords.get("nurture_foryou", (100, 50))
-        for _ in range(3):
+        for attempt in range(3):
             if self.should_stop:
-                return
-            device.swipe_dir("right", length=0.5, sx=fx, sy=fy)
-            time.sleep(0.5)
-        self.wait(2)
-        self._log(device, "已进入 For You 推荐页")
+                return False
+
+            # 回主屏幕 + 用 scheme 打开 TikTok
+            device.press_home()
+            self.wait(2)
+            self._log(device, f"打开 TikTok（第{attempt + 1}次）")
+            device.open_url(TIKTOK_SCHEME)
+            self.wait(5)
+            self._check_landscape(device)
+
+            # 识图确认：找到底部 Home 图标 = 确实在 TikTok 里
+            if has_home:
+                loc = device.find_image_file_native(HOME_ICON, sim)
+                if loc:
+                    device.tap(loc[0], loc[1])   # 点 Home 回到信息流首页
+                    self.wait(2)
+                    self._log(device, f"已确认进入 TikTok（识图Home {loc[0]},{loc[1]}）")
+                    return True
+
+            # scheme 没打开成功：回桌面找 TikTok 图标点击再试
+            self._log(device, f"第{attempt + 1}次未确认进入，尝试点桌面图标")
+            device.press_home()
+            self.wait(1.5)
+            if has_tiktok:
+                tloc = device.find_image_file_native(TIKTOK_ICON, sim)
+                if tloc:
+                    device.tap(tloc[0], tloc[1])
+                    self.wait(5)
+                    self._check_landscape(device)
+                    if has_home:
+                        loc2 = device.find_image_file_native(HOME_ICON, sim)
+                        if loc2:
+                            device.tap(loc2[0], loc2[1])
+                            self.wait(2)
+                            self._log(device, "点桌面图标已进入 TikTok")
+                            return True
+
+        return False
 
     def _nurture_step(self, device):
         """刷一个视频：横屏检测 → 上滑 → 点赞（验证过的流程）"""

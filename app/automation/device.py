@@ -96,10 +96,9 @@ class Device:
         })
 
     def swipe_dir(self, direction, length=0.5, sx=None, sy=None):
-        """按方向+距离滑动（与验证过的养号流程一致，只给起点+方向+长度）"""
+        """按方向+距离滑动（与验证过的养号流程一致，只给方向+距离+起点）"""
         logger.debug(f"[{self.name}] swipe_dir {direction} len={length} ({sx},{sy})")
-        data = {"deviceid": self.device_id, "direction": direction,
-                "button": "left", "length": length, "for": 0}
+        data = {"deviceid": self.device_id, "direction": direction, "length": length}
         if sx is not None:
             data["sx"] = sx
         if sy is not None:

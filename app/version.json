@@ -1,7 +1,7 @@
 {
   "app": {
-    "version": "1.1.11",
-    "changelog": "发布失败时自动截图存到debug目录并把路径写进报错,方便看当时手机在什么界面排查",
+    "version": "1.1.12",
+    "changelog": "养号修复:识图确认真进入TikTok才操作(进不去就跳过该设备),去掉导致下拉通知中心的顶部右滑,不再把手机弄到桌面/通知中心",
     "files": [
       "automation/__init__.py",
       "automation/app.py",
