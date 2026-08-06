@@ -84,6 +84,12 @@ class AutomationApp(QtWidgets.QMainWindow):
         self._ui.button_import_jobs.clicked.connect(self._import_jobs_excel)
         self._ui.button_pick_files.clicked.connect(self._pick_files)
         self._ui.button_pick_folder.clicked.connect(self._pick_folder)
+
+        # 工作流开关（当前仅UI，功能后续接入）
+        for key, row in self._ui.workflow_rows.items():
+            row["button"].clicked.connect(
+                lambda checked, k=key: self._toggle_workflow(k, checked))
+        self._ui.button_wf_save_cfg.clicked.connect(self._save_workflow_cfg)
         self._ui.button_start_scheduler.clicked.connect(self._start_scheduler)
         self._ui.button_stop_scheduler.clicked.connect(self._stop_scheduler)
         self._ui.button_del_job.clicked.connect(self._delete_selected_job)
@@ -633,6 +639,31 @@ class AutomationApp(QtWidgets.QMainWindow):
         except Exception as e:
             self._log(f"导入失败: {e}")
             QMessageBox.warning(self, "导入失败", str(e))
+
+    # ── 工作流（当前仅UI，功能后续接入）──
+
+    def _toggle_workflow(self, key, checked):
+        row = self._ui.workflow_rows.get(key)
+        if not row:
+            return
+        name = row["name"]
+        btn = row["button"]
+        status = row["status"]
+        if checked:
+            btn.setText("停止")
+            status.setText("运行中")
+            status.setStyleSheet("color: #4CAF50; font-weight: bold; border: none;")
+            self._log(f"[工作流] 启动: {name}（功能开发中，暂未实际运行）")
+        else:
+            btn.setText("启动")
+            status.setText("未运行")
+            status.setStyleSheet("color: #9E9E9E; font-weight: bold; border: none;")
+            self._log(f"[工作流] 停止: {name}")
+
+    def _save_workflow_cfg(self):
+        token = self._ui.lineEdit_wf_token.text().strip()
+        self._log(f"[工作流] 飞书表配置已记录（功能开发中）: {token[:40]}")
+        QMessageBox.information(self, "已保存", "飞书表配置已记录（工作流功能开发中）")
 
     # ── 直接选素材文件/文件夹生成任务 ──
 

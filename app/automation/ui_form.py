@@ -528,7 +528,96 @@ class Ui_AutomationWindow(object):
 
         self.tabWidget.addTab(self.tab_publish, "定时发布")
 
-        # ══════════════ Tab 3: 设置 ══════════════
+        # ══════════════ Tab 3: 工作流 ══════════════
+        self.tab_workflow = QtWidgets.QWidget()
+        tabw = QtWidgets.QVBoxLayout(self.tab_workflow)
+        tabw.setContentsMargins(12, 12, 12, 12)
+        tabw.setSpacing(10)
+
+        wf_hint = QtWidgets.QLabel(
+            "工作流会从飞书表读取待处理的视频/图片，处理完成后自动把表格里对应的状态列改成新状态。"
+            "打开开关即开始运行，关闭即停止。")
+        wf_hint.setStyleSheet("color: #555; font-size: 12px;")
+        wf_hint.setWordWrap(True)
+        tabw.addWidget(wf_hint)
+
+        # 飞书表配置（预留：后续接入用）
+        wf_cfg_group = QtWidgets.QGroupBox("飞书表配置")
+        wf_cfg_layout = QtWidgets.QGridLayout(wf_cfg_group)
+        wf_cfg_layout.addWidget(QtWidgets.QLabel("多维表格链接/Token:"), 0, 0)
+        self.lineEdit_wf_token = QtWidgets.QLineEdit()
+        self.lineEdit_wf_token.setPlaceholderText("飞书多维表格的分享链接或 app_token（后续接入）")
+        wf_cfg_layout.addWidget(self.lineEdit_wf_token, 0, 1)
+        self.button_wf_save_cfg = QtWidgets.QPushButton("保存配置")
+        self.button_wf_save_cfg.setStyleSheet(
+            "QPushButton { background-color: #1976D2; color: white; "
+            "border: none; border-radius: 3px; padding: 5px 14px; }")
+        wf_cfg_layout.addWidget(self.button_wf_save_cfg, 0, 2)
+        tabw.addWidget(wf_cfg_group)
+
+        # 工作流列表（数据驱动，方便以后增删）
+        self.WORKFLOWS = [
+            ("extract_hot", "提取博主爆款视频",
+             "从飞书表读取博主，提取其爆款视频，回填到表格"),
+            ("gen_prompt", "根据视频内容生成贴字及生图提示词",
+             "分析视频内容，生成贴字文案和生图提示词，写回表格"),
+            ("gen_image", "根据生图提示词进行生图",
+             "读取生图提示词，调用生图，把生成的图片回填表格"),
+            ("bw_repro", "根据视频音频复刻同款黑白空镜",
+             "读取视频，复刻其音频，生成同款黑白空镜视频"),
+        ]
+
+        wf_list_group = QtWidgets.QGroupBox("工作流开关")
+        wf_list_layout = QtWidgets.QVBoxLayout(wf_list_group)
+        wf_list_layout.setSpacing(8)
+
+        # 存每个工作流的控件，供 app.py 绑定
+        self.workflow_rows = {}
+        for key, name, desc in self.WORKFLOWS:
+            card = QtWidgets.QFrame()
+            card.setStyleSheet(
+                "QFrame { background: #FAFAFA; border: 1px solid #E0E0E0; border-radius: 5px; }")
+            card_layout = QtWidgets.QHBoxLayout(card)
+            card_layout.setContentsMargins(12, 8, 12, 8)
+
+            # 左侧：名称 + 说明
+            text_box = QtWidgets.QVBoxLayout()
+            text_box.setSpacing(2)
+            name_lbl = QtWidgets.QLabel(name)
+            name_lbl.setStyleSheet("font-weight: bold; font-size: 13px; border: none;")
+            text_box.addWidget(name_lbl)
+            desc_lbl = QtWidgets.QLabel(desc)
+            desc_lbl.setStyleSheet("color: #888; font-size: 11px; border: none;")
+            text_box.addWidget(desc_lbl)
+            card_layout.addLayout(text_box, stretch=1)
+
+            # 中间：状态
+            status_lbl = QtWidgets.QLabel("未运行")
+            status_lbl.setStyleSheet("color: #9E9E9E; font-weight: bold; border: none;")
+            status_lbl.setMinimumWidth(70)
+            status_lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+            card_layout.addWidget(status_lbl)
+
+            # 右侧：开关按钮
+            toggle_btn = QtWidgets.QPushButton("启动")
+            toggle_btn.setCheckable(True)
+            toggle_btn.setMinimumWidth(80)
+            toggle_btn.setStyleSheet(
+                "QPushButton { background-color: #4CAF50; color: white; font-weight: bold; "
+                "padding: 6px 16px; border: none; border-radius: 4px; }"
+                "QPushButton:checked { background-color: #F44336; }")
+            card_layout.addWidget(toggle_btn)
+
+            wf_list_layout.addWidget(card)
+            self.workflow_rows[key] = {
+                "name": name, "button": toggle_btn, "status": status_lbl,
+            }
+
+        tabw.addWidget(wf_list_group)
+        tabw.addStretch()
+        self.tabWidget.addTab(self.tab_workflow, "工作流")
+
+        # ══════════════ Tab 4: 设置 ══════════════
         self.tab_settings = QtWidgets.QWidget()
         tab2 = QtWidgets.QVBoxLayout(self.tab_settings)
         tab2.setContentsMargins(12, 12, 12, 12)

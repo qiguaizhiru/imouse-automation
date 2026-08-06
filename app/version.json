@@ -1,7 +1,7 @@
 {
   "app": {
-    "version": "1.1.12",
-    "changelog": "养号修复:识图确认真进入TikTok才操作(进不去就跳过该设备),去掉导致下拉通知中心的顶部右滑,不再把手机弄到桌面/通知中心",
+    "version": "1.1.13",
+    "changelog": "新增工作流Tab(仅UI):4个工作流开关(提取爆款/生成提示词/生图/黑白空镜)+飞书表配置,功能后续接入",
     "files": [
       "automation/__init__.py",
       "automation/app.py",
