@@ -541,18 +541,33 @@ class Ui_AutomationWindow(object):
         wf_hint.setWordWrap(True)
         tabw.addWidget(wf_hint)
 
-        # 飞书表配置（预留：后续接入用）
-        wf_cfg_group = QtWidgets.QGroupBox("飞书表配置")
+        # 飞书表配置（凭据只存本机 workflow_config.json，不打进程序包/不上传）
+        wf_cfg_group = QtWidgets.QGroupBox("飞书表配置（生图工作流用）")
         wf_cfg_layout = QtWidgets.QGridLayout(wf_cfg_group)
-        wf_cfg_layout.addWidget(QtWidgets.QLabel("多维表格链接/Token:"), 0, 0)
+        wf_cfg_layout.addWidget(QtWidgets.QLabel("App ID:"), 0, 0)
+        self.lineEdit_wf_app_id = QtWidgets.QLineEdit()
+        self.lineEdit_wf_app_id.setPlaceholderText("cli_xxxxxxxx")
+        wf_cfg_layout.addWidget(self.lineEdit_wf_app_id, 0, 1)
+        wf_cfg_layout.addWidget(QtWidgets.QLabel("App Secret:"), 0, 2)
+        self.lineEdit_wf_app_secret = QtWidgets.QLineEdit()
+        self.lineEdit_wf_app_secret.setEchoMode(QtWidgets.QLineEdit.EchoMode.Password)
+        self.lineEdit_wf_app_secret.setPlaceholderText("飞书应用密钥")
+        wf_cfg_layout.addWidget(self.lineEdit_wf_app_secret, 0, 3)
+        wf_cfg_layout.addWidget(QtWidgets.QLabel("多维表格链接/Token:"), 1, 0)
         self.lineEdit_wf_token = QtWidgets.QLineEdit()
-        self.lineEdit_wf_token.setPlaceholderText("飞书多维表格的分享链接或 app_token（后续接入）")
-        wf_cfg_layout.addWidget(self.lineEdit_wf_token, 0, 1)
+        self.lineEdit_wf_token.setPlaceholderText("粘贴表格分享链接（自动解析 app_token 和 table_id）或直接填 app_token")
+        wf_cfg_layout.addWidget(self.lineEdit_wf_token, 1, 1, 1, 3)
+        wf_cfg_layout.addWidget(QtWidgets.QLabel("数据表 table_id:"), 2, 0)
+        self.lineEdit_wf_table_id = QtWidgets.QLineEdit()
+        self.lineEdit_wf_table_id.setPlaceholderText("tblxxxxxxxx（填了链接会自动带出）")
+        wf_cfg_layout.addWidget(self.lineEdit_wf_table_id, 2, 1)
         self.button_wf_save_cfg = QtWidgets.QPushButton("保存配置")
         self.button_wf_save_cfg.setStyleSheet(
             "QPushButton { background-color: #1976D2; color: white; "
             "border: none; border-radius: 3px; padding: 5px 14px; }")
-        wf_cfg_layout.addWidget(self.button_wf_save_cfg, 0, 2)
+        wf_cfg_layout.addWidget(self.button_wf_save_cfg, 2, 3)
+        wf_cfg_layout.setColumnStretch(1, 1)
+        wf_cfg_layout.setColumnStretch(3, 1)
         tabw.addWidget(wf_cfg_group)
 
         # 工作流列表（数据驱动，方便以后增删）
@@ -617,6 +632,149 @@ class Ui_AutomationWindow(object):
         tabw.addStretch()
         self.tabWidget.addTab(self.tab_workflow, "工作流")
 
+        # ═══════════════════════════════════════════════
+        # Tab: 素材上传（套用 V2.0 实战程序的「上传」选项卡）
+        # ═══════════════════════════════════════════════
+        self.tab_upload = QtWidgets.QWidget()
+        tabu = QtWidgets.QVBoxLayout(self.tab_upload)
+        tabu.setContentsMargins(12, 12, 12, 12)
+        tabu.setSpacing(10)
+        _btn_css = ("QPushButton { background-color: #1976D2; color: white; border: none; "
+                    "border-radius: 3px; padding: 5px 12px; }")
+
+        up_hint = QtWidgets.QLabel(
+            "把电脑上的图片/视频传到手机（专业版/XP版通用，走 iMouse 快捷指令，手机需已投屏在线）。"
+            "填了「素材文件夹」就按<b>子文件夹名 = 设备自定义名</b>分发（每台只收自己的）；"
+            "没填就把下面列表里的文件传给每台设备。")
+        up_hint.setStyleSheet("color: #555; font-size: 12px;")
+        up_hint.setWordWrap(True)
+        tabu.addWidget(up_hint)
+
+        # ── 上传目标 ──
+        up_target_group = QtWidgets.QGroupBox("上传目标")
+        up_target_layout = QtWidgets.QHBoxLayout(up_target_group)
+        self.radio_up_album = QtWidgets.QRadioButton("上传到相册")
+        self.radio_up_file = QtWidgets.QRadioButton("上传到文件系统 (iOS 15+)")
+        self.radio_up_album.setChecked(True)
+        up_target_layout.addWidget(self.radio_up_album)
+        up_target_layout.addWidget(self.radio_up_file)
+        up_target_layout.addSpacing(20)
+        up_target_layout.addWidget(QtWidgets.QLabel("相册/目标路径:"))
+        self.lineEdit_up_album = QtWidgets.QLineEdit()
+        self.lineEdit_up_album.setPlaceholderText("留空=默认相册(Recents)/根目录")
+        self.lineEdit_up_album.setMaximumWidth(240)
+        up_target_layout.addWidget(self.lineEdit_up_album)
+        up_target_layout.addStretch()
+        tabu.addWidget(up_target_group)
+
+        # ── 按自定义名分文件夹上传 ──
+        self.group_up_folder = QtWidgets.QGroupBox("按自定义名分文件夹上传")
+        up_folder_layout = QtWidgets.QHBoxLayout(self.group_up_folder)
+        up_folder_layout.addWidget(QtWidgets.QLabel("素材文件夹:"))
+        self.lineEdit_up_root = QtWidgets.QLineEdit()
+        self.lineEdit_up_root.setPlaceholderText(
+            "如 D:\\iMousePro\\Shortcut\\Media   （子文件夹名 = 设备自定义名，也可用 1,2,3… 序号）")
+        self.button_up_pick_root = QtWidgets.QPushButton("选择")
+        self.button_up_pick_root.setStyleSheet(_btn_css)
+        self.button_up_clear_root = QtWidgets.QPushButton("清空")
+        self.button_up_preview = QtWidgets.QPushButton("预览匹配")
+        up_folder_layout.addWidget(self.lineEdit_up_root, 1)
+        up_folder_layout.addWidget(self.button_up_pick_root)
+        up_folder_layout.addWidget(self.button_up_clear_root)
+        up_folder_layout.addWidget(self.button_up_preview)
+        tabu.addWidget(self.group_up_folder)
+
+        # ── 统一文件上传 ──
+        self.group_up_files = QtWidgets.QGroupBox("统一文件上传 (所有设备相同文件)")
+        up_files_layout = QtWidgets.QVBoxLayout(self.group_up_files)
+        up_files_btns = QtWidgets.QHBoxLayout()
+        self.button_up_add_files = QtWidgets.QPushButton("选择文件")
+        self.button_up_add_dir = QtWidgets.QPushButton("选择文件夹")
+        self.button_up_remove = QtWidgets.QPushButton("移除选中")
+        self.button_up_clear = QtWidgets.QPushButton("清空列表")
+        for b in (self.button_up_add_files, self.button_up_add_dir):
+            b.setStyleSheet(_btn_css)
+        self.label_up_count = QtWidgets.QLabel("已选: 0 个文件")
+        self.label_up_count.setStyleSheet("color: #666;")
+        up_files_btns.addWidget(self.button_up_add_files)
+        up_files_btns.addWidget(self.button_up_add_dir)
+        up_files_btns.addWidget(self.button_up_remove)
+        up_files_btns.addStretch()
+        up_files_btns.addWidget(self.label_up_count)
+        up_files_btns.addWidget(self.button_up_clear)
+        up_files_layout.addLayout(up_files_btns)
+        self.list_up_files = QtWidgets.QListWidget()
+        self.list_up_files.setSelectionMode(
+            QtWidgets.QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.list_up_files.setMinimumHeight(110)
+        self.list_up_files.setStyleSheet("font-family: Consolas, monospace; font-size: 11px;")
+        up_files_layout.addWidget(self.list_up_files)
+        tabu.addWidget(self.group_up_files)
+
+        # ── 参数 ──
+        up_param_layout = QtWidgets.QHBoxLayout()
+        up_param_layout.addWidget(QtWidgets.QLabel("单文件超时(秒):"))
+        self.spin_up_timeout = QtWidgets.QSpinBox()
+        self.spin_up_timeout.setRange(10, 600)
+        self.spin_up_timeout.setValue(90)
+        self.spin_up_timeout.setMaximumWidth(70)
+        up_param_layout.addWidget(self.spin_up_timeout)
+        up_param_layout.addSpacing(12)
+        up_param_layout.addWidget(QtWidgets.QLabel("并发设备数:"))
+        self.spin_up_workers = QtWidgets.QSpinBox()
+        self.spin_up_workers.setRange(1, 20)
+        self.spin_up_workers.setValue(1)
+        self.spin_up_workers.setMaximumWidth(70)
+        self.spin_up_workers.setToolTip("1 = 一台一台传（与旧版一致，最稳）；多台同时传可调大")
+        up_param_layout.addWidget(self.spin_up_workers)
+        up_param_layout.addSpacing(12)
+        self.check_up_delete = QtWidgets.QCheckBox("上传成功后删除电脑上的原文件")
+        up_param_layout.addWidget(self.check_up_delete)
+        self.check_up_rm_empty = QtWidgets.QCheckBox("删完后移除空文件夹")
+        up_param_layout.addWidget(self.check_up_rm_empty)
+        up_param_layout.addStretch()
+        tabu.addLayout(up_param_layout)
+
+        # ── 按钮 + 进度 ──
+        up_btn_layout = QtWidgets.QHBoxLayout()
+        self.button_up_start = QtWidgets.QPushButton("上传到选中设备")
+        self.button_up_start.setMinimumHeight(38)
+        self.button_up_start.setStyleSheet(
+            "QPushButton { background-color: #1976D2; color: white; font-weight: bold; "
+            "font-size: 13px; border: none; border-radius: 4px; padding: 8px 24px; }"
+            "QPushButton:disabled { background-color: #90CAF9; }")
+        self.button_up_all = QtWidgets.QPushButton("一键上传到所有设备")
+        self.button_up_all.setMinimumHeight(38)
+        self.button_up_all.setStyleSheet(
+            "QPushButton { background-color: #4CAF50; color: white; font-weight: bold; "
+            "font-size: 13px; border: none; border-radius: 4px; padding: 8px 24px; }"
+            "QPushButton:disabled { background-color: #A5D6A7; }")
+        self.button_up_stop = QtWidgets.QPushButton("停止")
+        self.button_up_stop.setMinimumHeight(38)
+        self.button_up_stop.setEnabled(False)
+        self.button_up_stop.setStyleSheet(
+            "QPushButton { background-color: #F44336; color: white; font-weight: bold; "
+            "border: none; border-radius: 4px; padding: 8px 24px; }"
+            "QPushButton:disabled { background-color: #EF9A9A; }")
+        self.label_up_progress = QtWidgets.QLabel("")
+        self.label_up_progress.setStyleSheet("color: #555;")
+        up_btn_layout.addWidget(self.button_up_start, 2)
+        up_btn_layout.addWidget(self.button_up_all, 2)
+        up_btn_layout.addWidget(self.button_up_stop, 1)
+        up_btn_layout.addWidget(self.label_up_progress, 2)
+        tabu.addLayout(up_btn_layout)
+
+        # ── 预览 ──
+        self.text_up_preview = QtWidgets.QPlainTextEdit()
+        self.text_up_preview.setReadOnly(True)
+        self.text_up_preview.setMaximumHeight(120)
+        self.text_up_preview.setPlaceholderText("选了素材文件夹后点「预览匹配」，这里显示每个子文件夹会发到哪台设备")
+        self.text_up_preview.setStyleSheet("font-family: Consolas, monospace; font-size: 11px;")
+        tabu.addWidget(self.text_up_preview)
+
+        tabu.addStretch()
+        self.tabWidget.addTab(self.tab_upload, "素材上传")
+
         # ══════════════ Tab 4: 设置 ══════════════
         self.tab_settings = QtWidgets.QWidget()
         tab2 = QtWidgets.QVBoxLayout(self.tab_settings)
@@ -647,8 +805,9 @@ class Ui_AutomationWindow(object):
         node_v = QtWidgets.QVBoxLayout(node_group)
 
         node_hint = QtWidgets.QLabel(
-            "每个节点 = 一台运行 iMouse 的电脑。要控制其他电脑：下方填它的【名称+局域网IP+端口9912】→"
-            "点【测试】确认能连 → 点【添加节点】。添加后「状态」列显示每台在线/离线及设备数"
+            "每个节点 = 一台运行 iMouse 的电脑。要控制其他电脑：下方填它的【名称+局域网IP】→"
+            "点【测试】确认能连 → 点【添加节点】。<b>专业版 / XP版 会自动识别</b>（Pro 走 9912、XP 走 9911），"
+            "端口留 0 即可；「版本」列显示识别结果。"
             "（点【测试】但IP留空=刷新所有节点状态）。其他电脑需开着 iMouse、与本机同一局域网。")
         node_hint.setStyleSheet("color: #888; font-size: 11px;")
         node_hint.setWordWrap(True)
@@ -656,11 +815,12 @@ class Ui_AutomationWindow(object):
 
         # 节点列表表格
         self.table_nodes = QtWidgets.QTableWidget()
-        self.table_nodes.setColumnCount(4)
-        self.table_nodes.setHorizontalHeaderLabels(["节点名称", "IP地址", "端口", "状态"])
+        self.table_nodes.setColumnCount(5)
+        self.table_nodes.setHorizontalHeaderLabels(["节点名称", "IP地址", "端口", "版本", "状态"])
         self.table_nodes.setColumnWidth(0, 120)
         self.table_nodes.setColumnWidth(1, 140)
         self.table_nodes.setColumnWidth(2, 70)
+        self.table_nodes.setColumnWidth(3, 80)
         self.table_nodes.horizontalHeader().setStretchLastSection(True)
         self.table_nodes.verticalHeader().hide()
         self.table_nodes.setAlternatingRowColors(True)
@@ -683,11 +843,20 @@ class Ui_AutomationWindow(object):
         self.lineEdit_host.setMaximumWidth(130)
         node_add.addWidget(self.lineEdit_host)
 
+        node_add.addWidget(QtWidgets.QLabel("版本:"))
+        self.combo_version = QtWidgets.QComboBox()
+        self.combo_version.addItems(["自动识别", "专业版", "XP版"])
+        self.combo_version.setMaximumWidth(90)
+        self.combo_version.setToolTip("自动识别：依次探测 9912(Pro) / 9911(XP)")
+        node_add.addWidget(self.combo_version)
+
         node_add.addWidget(QtWidgets.QLabel("端口:"))
         self.spin_port = QtWidgets.QSpinBox()
-        self.spin_port.setRange(1, 65535)
-        self.spin_port.setValue(9912)
+        self.spin_port.setRange(0, 65535)
+        self.spin_port.setValue(0)
+        self.spin_port.setSpecialValueText("自动")
         self.spin_port.setMaximumWidth(80)
+        self.spin_port.setToolTip("0 = 按识别到的版本自动选端口；只在改过 iMouse 默认端口时才手填")
         node_add.addWidget(self.spin_port)
 
         self.button_test_conn = QtWidgets.QPushButton("测试")

@@ -1,7 +1,7 @@
 {
   "app": {
-    "version": "1.1.13",
-    "changelog": "新增工作流Tab(仅UI):4个工作流开关(提取爆款/生成提示词/生图/黑白空镜)+飞书表配置,功能后续接入",
+    "version": "1.2.2",
+    "changelog": "v1.2.2 ①发布：改用 tiktok:// 打开并确认已进入TikTok首页；发布(+)/Use sound/Post/缩略图识图改为轮询等待(最多15秒)，(+)识图不到时按底栏正中坐标兜底并验证进入拍摄页 ②素材上传：套用V2.0上传选项卡逻辑——上传到相册/文件系统(iOS15+)、按自定义名分文件夹(子文件夹名=设备名)、统一文件上传、上传到选中/一键全部 ③生图工作流的飞书凭据改为在「工作流」Tab 填写并只存本机",
     "files": [
       "automation/__init__.py",
       "automation/app.py",
@@ -10,6 +10,8 @@
       "automation/device.py",
       "automation/engine.py",
       "automation/error_reporter.py",
+      "automation/feishu.py",
+      "automation/imouse_backend.py",
       "automation/logger.py",
       "automation/nodes.py",
       "automation/paths.py",
@@ -18,10 +20,14 @@
       "automation/tasks/base.py",
       "automation/tasks/nurture.py",
       "automation/tasks/publish.py",
+      "automation/tasks/upload.py",
       "automation/ui_form.py",
       "automation/updater.py",
       "automation/version.py",
       "automation/vision.py",
+      "automation/workflows/__init__.py",
+      "automation/workflows/base.py",
+      "automation/workflows/gen_image.py",
       "icon/+black.bmp",
       "icon/+white.bmp",
       "icon/Add a catchy title.bmp",

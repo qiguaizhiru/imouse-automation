@@ -3,7 +3,8 @@ import os
 
 DEFAULT_CONFIG = {
     "imouse_host": "127.0.0.1",
-    "imouse_port": 9912,
+    "imouse_port": 0,           # 0 = 按版本自动选（Pro 9912 / XP 9911）
+    "imouse_version": "auto",   # auto / pro / xp
     "feishu_app_id": "cli_a99b14fa3b7d900d",
     "feishu_app_secret": "ZTawO0DxS1k06DTXYEiDAg8ACWaGCONz",
     "feishu_app_token": "NOulwz2X3i6Eg9kU9L0cnh8Qnyg",

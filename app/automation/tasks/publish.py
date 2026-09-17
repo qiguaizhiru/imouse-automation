@@ -96,6 +96,7 @@ DEFAULT_PUBLISH_CONFIG = {
     "icon_dir": ICON_DIR,
     "icon_similarity": 0.7,
     "step_wait": 5,          # 关键步骤间等待（秒）
+    "find_timeout": 15,      # 关键按钮识图最多轮询秒数（与 V2.0 实战程序一致）
 }
 
 
@@ -174,24 +175,17 @@ class PublishTask(BaseTask):
             raise RuntimeError("图文发布失败：没填音乐URL（TikTok图文需要配音乐，"
                                "请在音乐URL框填写）")
 
-        # 1. 返回主屏幕
-        self._log(device, "返回主屏幕...")
-        device.send_key(fn_key="HOME")
-        self.wait(2)
-
-        # 2. 打开 TikTok
-        if not self._find_and_click(device, "tiktok.bmp", sim):
-            self._log(device, "未找到 TikTok 图标，使用备选方案")
-            self.wait(3)
+        # 1-2. 回桌面 → 打开 TikTok（URL scheme 优先，识图兜底，确认真的进去了）
+        self._open_tiktok(device, sim)
 
         # 3. 打开音乐 URL
         self._log(device, f"打开音乐URL: {url}")
         ret = device.open_url(url)
-        if ret and ret.get("status", -1) not in (0, 200):
+        if ret and not device._ok(ret):
             raise RuntimeError(f"图文发布失败：音乐URL打开失败({ret.get('message', '未知')})")
         self.wait(10)
 
-        # 4. 点击 Use sound
+        # 4. 点击 Use sound（音乐页加载有快有慢，轮询最多 find_timeout 秒）
         if not self._find_and_click(device, "usesound.bmp", sim):
             self._fail(device, "usesound_fail",
                        "图文发布失败：没找到 Use sound 按钮"
@@ -206,7 +200,7 @@ class PublishTask(BaseTask):
 
         # 6. 点击 next 两次
         for i in range(2):
-            if not self._find_and_click(device, "next.bmp", sim, required=False):
+            if not self._find_and_click(device, "next.bmp", sim, required=False, timeout=5):
                 self._log(device, f"第{i+1}次 next 未找到（不影响）")
             self.wait(wait)
 
@@ -214,7 +208,7 @@ class PublishTask(BaseTask):
         self._input_title_desc(device, title, description, sim)
 
         # 8. 点击 post
-        if not self._find_and_click(device, "post.bmp", sim):
+        if not self._find_and_click(device, ["post.bmp", "旧版post.bmp"], sim, label="Post"):
             self._fail(device, "post_fail", "图文发布失败：没找到发布(Post)按钮")
 
         return True
@@ -229,22 +223,11 @@ class PublishTask(BaseTask):
         wait = cfg.get("step_wait", 5)
         description = cfg.get("description", "")
 
-        # 1. 返回主屏幕
-        self._log(device, "返回主屏幕...")
-        device.send_key(fn_key="HOME")
-        self.wait(2)
+        # 1-2. 回桌面 → 打开 TikTok（URL scheme 优先，识图兜底，确认真的进去了）
+        self._open_tiktok(device, sim)
 
-        # 2. 打开 TikTok
-        if not self._find_and_click(device, "tiktok.bmp", sim):
-            self._log(device, "未找到 TikTok 图标，使用备选方案")
-            self.wait(3)
-
-        # 3. 点击 + 按钮（先白后黑）
-        if not self._find_and_click(device, "+white.bmp", sim, required=False):
-            if not self._find_and_click(device, "+black.bmp", sim):
-                self._fail(device, "plus_fail",
-                           "视频发布失败：没找到发布(+)按钮"
-                           "（可能没打开TikTok首页，或TikTok界面已更新导致图标识别不到）")
+        # 3. 点击 + 按钮：识图（白/黑两版，轮询等首页加载）→ 底部正中坐标兜底
+        self._tap_plus_button(device, sim)
 
         # 4. 查找并点击视频缩略图
         self._log(device, "查找视频缩略图...")
@@ -256,12 +239,13 @@ class PublishTask(BaseTask):
 
         # 5. 点击 next 两次
         for i in range(2):
-            if not self._find_and_click(device, "next.bmp", sim, required=False):
+            if not self._find_and_click(device, "next.bmp", sim, required=False, timeout=5):
                 self._log(device, f"第{i+1}次 next 未找到（不影响）")
             self.wait(wait)
 
         # 6. 输入描述
-        loc = self._find_icon(device, "Add description.bmp", sim)
+        loc = (self._find_icon(device, "Add description.bmp", sim)
+               or self._find_icon(device, "Writing a long description.bmp", sim))
         if loc:
             cx, cy = loc[0], loc[1]
             device.tap(cx, cy)
@@ -271,7 +255,7 @@ class PublishTask(BaseTask):
             self._log(device, "未找到 Add description（跳过描述）")
 
         # 7. 点击 post
-        if not self._find_and_click(device, "post.bmp", sim):
+        if not self._find_and_click(device, ["post.bmp", "旧版post.bmp"], sim, label="Post"):
             self._fail(device, "post_fail",
                        "视频发布失败：没找到发布(Post)按钮"
                        "（可能卡在上一步，或Post按钮位置/图标变了）")
@@ -336,32 +320,138 @@ class PublishTask(BaseTask):
             msg += f"（已存失败截图: {shot}）"
         raise RuntimeError(msg)
 
+    # ── 打开 TikTok / 进入发布页（与 V2.0 实战程序 + 养号 _open_tiktok 一致）──
+
+    def _open_tiktok(self, device, sim):
+        """回桌面 → URL scheme 打开 TikTok（失败再识图点桌面图标）→ 验证已进入 → 点首页tab。
+
+        旧逻辑只识图点一次桌面图标、找不到就干等 3 秒往下走，TikTok 根本没打开时
+        后面必然报"没找到发布(+)按钮"。这里改成 V2.0 验证过的流程并加确认。
+        """
+        tiktok_icon = _icon(self.config, "tiktok.bmp")
+        has_icon = os.path.exists(tiktok_icon)
+        wait = self.config.get("step_wait", 5)
+
+        for attempt in range(3):
+            self._log(device, "返回主屏幕..." if attempt == 0 else f"第{attempt+1}次尝试打开 TikTok")
+            device.press_home()
+            self.wait(2)
+
+            r = device.open_tiktok()           # tiktok:// → snssdk1233://，内部已等 4-6 秒
+            if r is not None and device._ok(r):
+                self._log(device, "已通过 URL scheme 打开 TikTok")
+            elif has_icon:
+                loc = device.find_image_file(tiktok_icon, sim)
+                if loc:
+                    self._log(device, f"URL 方式被拒绝，识图点击桌面图标 ({loc[0]}, {loc[1]})")
+                    device.tap(loc[0], loc[1])
+                else:
+                    self._log(device, "URL 方式被拒绝，桌面也没找到 TikTok 图标")
+            self.wait(wait)
+
+            # 验证：桌面图标还在屏幕上 = 没进去，重试
+            if has_icon and device.find_image_file(tiktok_icon, sim):
+                self._log(device, "  仍在桌面，未进入 TikTok")
+                continue
+            # 进入后点一下底部首页tab，确保停在推荐页（发布(+)在首页底栏）
+            device.tap_home_tab()
+            self.wait(2)
+            self._log(device, "已进入 TikTok 首页")
+            return
+
+        self._fail(device, "open_tiktok_fail",
+                   "发布失败：多次尝试后仍未进入 TikTok"
+                   "（请确认手机已解锁、TikTok 已安装且 iMouse 投屏正常）")
+
+    def _tap_plus_button(self, device, sim):
+        """点击底栏发布(+)：识图 +white/+black 轮询 → 底部正中坐标兜底。"""
+        loc = self._find_and_click(device, ["+white.bmp", "+black.bmp"], sim,
+                                   required=False, label="发布(+)")
+        if loc:
+            return
+        # 识图没找到：TikTok 首页底栏的 + 固定在正中，用坐标兜底（SE 已按比例换算）
+        pt = device.coords.get("plus_button")
+        if not pt:
+            self._fail(device, "plus_fail",
+                       "视频发布失败：没找到发布(+)按钮"
+                       "（可能没打开TikTok首页，或TikTok界面已更新导致图标识别不到）")
+        self._log(device, f"识图未找到发布(+)，用坐标兜底 ({pt[0]}, {pt[1]})")
+        device.tap(pt[0], pt[1])
+        self.wait(3)
+        # 兜底点击后验证：拍摄页应出现 record/record2 标记 或 底栏 + 消失
+        for name in ("record2.bmp", "record.bmp"):
+            p = _icon(self.config, name)
+            if os.path.exists(p) and device.find_image_file(p, sim):
+                self._log(device, "已进入拍摄/上传页")
+                return
+        still_plus = self._find_icon(device, "+white.bmp", sim) or self._find_icon(device, "+black.bmp", sim)
+        if still_plus:
+            self._fail(device, "plus_fail",
+                       "视频发布失败：点击发布(+)后没进入拍摄页"
+                       "（可能有弹窗挡住，或 TikTok 界面已更新）")
+        self._log(device, "未识别到拍摄页标记，继续（依赖后续识图）")
+
     def _find_icon(self, device, icon_name, sim):
         path = _icon(self.config, icon_name)
         return device.find_image_file(path, sim)
 
-    def _find_and_click(self, device, icon_name, sim, required=True):
-        path = _icon(self.config, icon_name)
-        if not os.path.exists(path):
-            self._log(device, f"图标不存在: {icon_name}")
-            return not required
-        loc = device.find_image_file(path, sim)
-        if loc:
-            cx, cy = loc[0], loc[1]
-            self._log(device, f"点击 {icon_name} ({cx}, {cy})")
-            device.tap(cx, cy)
-            self.wait(3)
-            return True
-        return False
+    def _find_and_click(self, device, icon_names, sim, required=True, timeout=None, label=None):
+        """识图找图标并点击（V2.0 实战程序的轮询方式）。
 
-    def _find_and_click_bytes(self, device, img_bytes, sim):
-        loc = device.find_image_bytes(img_bytes, sim)
-        if loc:
-            cx, cy = loc[0], loc[1]
-            self._log(device, f"点击素材 ({cx}, {cy})")
-            device.tap(cx, cy)
-            self.wait(3)
-            return True
+        icon_names: 单个文件名或列表（任一命中即点击）。
+        timeout: 最多轮询秒数（默认 config.find_timeout=15），每秒查一次；
+                 页面加载慢/有过渡动画时不会一查不到就放弃。
+        返回命中的 (x, y)；没找到 / 图标文件不存在 返回 None（required 仅作说明，
+        是否致命由调用方决定）。
+        """
+        if isinstance(icon_names, str):
+            icon_names = [icon_names]
+        paths = []
+        for n in icon_names:
+            p = _icon(self.config, n)
+            if os.path.exists(p):
+                paths.append((n, p))
+            else:
+                self._log(device, f"图标不存在: {n}")
+        if not paths:
+            return None
+        if timeout is None:
+            timeout = float(self.config.get("find_timeout", 15))
+        label = label or "/".join(n for n, _ in paths)
+
+        deadline = time.time() + max(1.0, timeout)
+        while time.time() < deadline:          # V2.0 同款：每秒查一次，直到超时
+            if self.should_stop:
+                return None
+            for n, p in paths:
+                loc = device.find_image_file(p, sim)
+                if loc:
+                    cx, cy = loc[0], loc[1]
+                    self._log(device, f"点击 {label} ({cx}, {cy})")
+                    device.tap(cx, cy)
+                    self.wait(3)
+                    return (cx, cy)
+            time.sleep(1)
+        self._log(device, f"识图未找到 {label}（已等 {int(timeout)} 秒）")
+        return None
+
+    def _find_and_click_bytes(self, device, img_bytes, sim, timeout=None):
+        """在屏幕上找素材缩略图并点击。相册网格加载有延迟，同样轮询等待。"""
+        if timeout is None:
+            timeout = float(self.config.get("find_timeout", 15))
+        deadline = time.time() + max(1.0, timeout)
+        while time.time() < deadline:
+            if self.should_stop:
+                return False
+            loc = device.find_image_bytes(img_bytes, sim)
+            if loc:
+                cx, cy = loc[0], loc[1]
+                self._log(device, f"点击素材 ({cx}, {cy})")
+                device.tap(cx, cy)
+                self.wait(3)
+                return True
+            time.sleep(1)
+        self._log(device, f"识图未找到素材缩略图（已等 {int(timeout)} 秒）")
         return False
 
     def _make_image_template(self, device, device_dir, file_name):

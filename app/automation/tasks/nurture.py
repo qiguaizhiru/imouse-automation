@@ -242,10 +242,23 @@ class NurtureTask(BaseTask):
 
         # 2. 上滑到下一个视频（起点按机型，SE自动换算）
         sx, sy = device.coords.get("nurture_swipe_up", (200, 550))
-        device.swipe_dir("up", length=0.5, sx=sx, sy=sy)
+        r = device.swipe_dir("up", length=0.5, sx=sx, sy=sy)
+        # 诊断：iMouse 明确报失败时把原因打出来（不然只看到"没滑"）
+        if r is not None and not device._ok(r):
+            self._log(device, f"[警告] 上滑被 iMouse 拒绝: status={r.get('status')} "
+                              f"{r.get('message', '')} | 版本={device.imouse_version} "
+                              f"起点=({sx},{sy}) len=0.5")
         self.wait(1.5)
         if self.should_stop:
             return
+
+        # 诊断：滑完若看到桌面上的 TikTok 图标 = 被甩回桌面了，记下现场
+        if os.path.exists(TIKTOK_ICON) and self._videos_watched < 3:
+            if device.find_image_file(TIKTOK_ICON, cfg.get("guard_similarity", 0.7)):
+                self._log(device, f"[警告] 上滑后检测到桌面 TikTok 图标（被甩回桌面）| "
+                                  f"版本={device.imouse_version} 机型={device.model_type} "
+                                  f"起点=({sx},{sy}) 屏幕={device.info.get('width')}x{device.info.get('height')}")
+                self._open_tiktok(device)
 
         # 3. 点赞（按配置概率；实战流程默认每个都点）
         if random.random() < cfg.get("like_chance", 1.0):
@@ -486,16 +499,12 @@ class NurtureTask(BaseTask):
         device.tap(sb[0], sb[1])
         time.sleep(0.5)
 
-        # 模拟粘贴: fn_key Ctrl+V
-        device._post("send_key", {
-            "deviceid": device.device_id, "key": "", "fn_key": "CTRL+v",
-        })
+        # 模拟粘贴: fn_key Ctrl+V（走适配层，Pro/XP 通用）
+        device.send_key("", "CTRL+v")
         time.sleep(0.5)
 
         # 点击搜索/回车
-        device._post("send_key", {
-            "deviceid": device.device_id, "key": "ENTER",
-        })
+        device.send_key("ENTER")
         time.sleep(2)
 
         # 浏览搜索结果

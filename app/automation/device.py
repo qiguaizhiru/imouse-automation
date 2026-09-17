@@ -6,8 +6,10 @@ import random
 import logging
 import requests
 from io import BytesIO
+from typing import Optional
 
 from .coordinates import get_coords, detect_model_type
+from .imouse_backend import make_backend, ImouseBackend, ProBackend, version_label
 
 logger = logging.getLogger("automation.device")
 
@@ -15,23 +17,37 @@ logger = logging.getLogger("automation.device")
 class Device:
     """对单个 iMouse 设备的操作封装，提供高层 TikTok 交互方法"""
 
-    def __init__(self, device_id, name, api_url, info=None, group_name="",
-                 node_name="本机"):
+    def __init__(self, device_id, name, api_url=None, info=None, group_name="",
+                 node_name="本机", backend: ImouseBackend = None):
         self.device_id = device_id
         self.name = name
-        self.api_url = api_url
         self.info = info or {}
         self.group_name = group_name
         self.node_name = node_name      # 所属节点（哪台电脑）
+        # 版本适配层：Pro / XP 的接口差异都封装在 backend 里
+        if backend is None:
+            # 兼容老调用：只给了 api_url 就当 Pro
+            host = "127.0.0.1"
+            if api_url:
+                try:
+                    host = api_url.split("//", 1)[1].split(":", 1)[0]
+                except Exception:
+                    pass
+            backend = ProBackend(host)
+        self.backend = backend
+        self.api_url = backend.api_url
         # 机型识别 + 加载对应坐标
         self.model_type = detect_model_type(self.info, group_name)
         self.coords = get_coords(self.model_type)
-        self._session = requests.Session()
-        self._session.headers.update({"Content-Type": "application/json"})
 
     def __repr__(self):
         return (f"Device({self.name!r}, id={self.device_id!r}, "
-                f"type={self.model_type}, node={self.node_name!r})")
+                f"type={self.model_type}, node={self.node_name!r}, "
+                f"imouse={self.backend.version})")
+
+    @property
+    def imouse_version(self):
+        return self.backend.version
 
     @property
     def full_name(self):
@@ -62,55 +78,36 @@ class Device:
             sw.get("ey", 200) + random.randint(-j, j),
         )
 
-    # ── 底层 API 调用 ──
+    # ── 底层 API 调用（保留给老代码；新代码请直接用 self.backend） ──
 
-    def _post(self, fun, data, quiet=False):
-        try:
-            r = self._session.post(
-                self.api_url,
-                json={"fun": fun, "data": data, "msgid": 0},
-                timeout=30,
-            )
-            return r.json()
-        except Exception as e:
-            if not quiet:
-                logger.warning(f"[{self.name}] API调用失败 {fun}: {e}")
-            return None
+    def _post(self, fun, data, quiet=False, timeout=30):
+        """直接透传一个 fun。注意：fun 名是版本相关的，
+        只在你明确知道当前版本的情况下用；否则用下面的高层方法。"""
+        return self.backend.post(fun, data, timeout=timeout, quiet=quiet)
+
+    def _ok(self, resp):
+        return self.backend.ok(resp)
 
     # ── 基础操作 ──
 
     def tap(self, x, y):
         logger.debug(f"[{self.name}] tap({x}, {y})")
-        return self._post("click", {
-            "deviceid": self.device_id, "button": "left",
-            "x": x, "y": y, "time": 0,
-        })
+        return self.backend.click(self.device_id, x, y)
 
     def swipe(self, sx, sy, ex, ey, length=0.9):
         direction = "up" if ey < sy else "down" if ey > sy else ("left" if ex < sx else "right")
         logger.debug(f"[{self.name}] swipe {direction} ({sx},{sy})->({ex},{ey})")
-        return self._post("swipe", {
-            "deviceid": self.device_id, "direction": direction,
-            "button": "left", "length": length,
-            "sx": sx, "sy": sy, "ex": ex, "ey": ey, "for": 0,
-        })
+        return self.backend.swipe(self.device_id, direction, length, sx, sy, ex, ey)
 
     def swipe_dir(self, direction, length=0.5, sx=None, sy=None):
         """按方向+距离滑动（与验证过的养号流程一致，只给方向+距离+起点）"""
         logger.debug(f"[{self.name}] swipe_dir {direction} len={length} ({sx},{sy})")
-        data = {"deviceid": self.device_id, "direction": direction, "length": length}
-        if sx is not None:
-            data["sx"] = sx
-        if sy is not None:
-            data["sy"] = sy
-        return self._post("swipe", data)
+        return self.backend.swipe(self.device_id, direction, length, sx, sy)
 
     def press_home(self):
         """回主屏幕（用 WIN+h，与验证过的养号/发布流程一致）"""
         logger.debug(f"[{self.name}] press_home")
-        return self._post("send_key", {
-            "deviceid": self.device_id, "key": "", "fn_key": "WIN+h",
-        })
+        return self.backend.send_key(self.device_id, "", "WIN+h")
 
     def is_landscape(self):
         """截图判断是否横屏（宽>高）。养号刷到直播会横屏，需特殊处理。
@@ -129,87 +126,42 @@ class Device:
             return None
 
     def open_url(self, url):
-        # devlist 传空（与验证过的养号流程一致），只对 deviceid 生效
         logger.debug(f"[{self.name}] open_url: {url}")
-        return self._post("shortcut", {
-            "deviceid": self.device_id, "id": 13,
-            "devlist": [],
-            "parameter": json.dumps({"url": url}),
-            "outtime": 30000,
-        })
+        return self.backend.open_url(self.device_id, url)
 
     def send_key(self, key="", fn_key=None):
         """发送按键，如 fn_key='HOME' 返回主屏幕"""
-        data = {"deviceid": self.device_id, "key": key}
-        if fn_key:
-            data["fn_key"] = fn_key
-        return self._post("send_key", data)
+        return self.backend.send_key(self.device_id, key, fn_key)
 
     def send_text(self, text):
         """发送批量字符（直接输入文本框）"""
-        return self._post("send_text", {
-            "deviceid": self.device_id, "key": text, "fn_key": None,
-        })
+        return self.backend.send_text(self.device_id, text)
+
+    def album_upload(self, file_paths, album="Recents", outtime=60000):
+        """上传本地图片/视频文件到手机相册。
+        file_paths: 本地文件路径列表，如 [r'D:\\a.jpg']"""
+        return self.backend.album_upload(self.device_id, file_paths, album, outtime)
+
+    def file_upload(self, file_paths, path="/", outtime=60000):
+        """上传本地文件到手机文件系统（iOS 15+）。path 为手机上的目标目录"""
+        return self.backend.file_upload(self.device_id, file_paths, path, outtime)
 
     def send_clipboard(self, text):
-        hex_text = text.encode("utf-8").hex()
-        return self._post("shortcut", {
-            "deviceid": self.device_id, "id": 10,
-            "devlist": [self.device_id],
-            "parameter": json.dumps({"text": hex_text}),
-            "outtime": 15000,
-        })
+        return self.backend.set_clipboard(self.device_id, text)
 
     def get_clipboard(self):
-        r = self._post("shortcut", {
-            "deviceid": self.device_id, "id": 11,
-            "parameter": "{}",
-            "outtime": 15000,
-        }, quiet=True)
-        if r and r.get("status") == 0:
-            rd = r.get("retdata", {})
-            if isinstance(rd, dict) and "text" in rd:
-                try:
-                    return bytes.fromhex(rd["text"]).decode("utf-8")
-                except Exception:
-                    return rd["text"]
-        return None
+        return self.backend.get_clipboard(self.device_id)
 
     def screenshot_b64(self):
-        r = self._post("get_device_screenshot", {
-            "deviceid": self.device_id, "isJpg": True,
-            "gzip": False, "original": False,
-        }, quiet=True)
-        if r and r.get("status") == 0:
-            d = r.get("data", {})
-            return d.get("img") or d.get("screenshot")
-        return None
+        return self.backend.screenshot_b64(self.device_id)
 
     def ocr(self, rect=None):
-        data = {"deviceid": self.device_id, "original": False}
-        if rect:
-            data["rect"] = rect
-        r = self._post("ocr", data, quiet=True)
-        if r and r.get("status") == 0:
-            return r.get("data", {})
-        return None
+        return self.backend.ocr(self.device_id, rect)
 
     def find_image_native(self, img_b64, similarity=0.7, rect=None):
         """iMouse 原生识图（服务端匹配），返回 (x, y, conf) 或 None。
         与验证过的养号流程一致，不做本地cv匹配，避免误匹配 + 减少截图。"""
-        data = {
-            "deviceid": self.device_id,
-            "img": img_b64, "similarity": similarity,
-        }
-        if rect:
-            data["rect"] = rect
-        r = self._post("find_image", data, quiet=True)
-        if r and r.get("status") in (0, 200):
-            rd = r.get("data", {})
-            result = rd.get("result")
-            if result and len(result) >= 2:
-                return (result[0], result[1], rd.get("confidence", 0))
-        return None
+        return self.backend.find_image(self.device_id, img_b64, similarity, rect)
 
     def find_image(self, img_b64, similarity=0.8, rect=None):
         """查找图片：优先本地 OpenCV 模板匹配，失败回退 iMouse 原生识图。
@@ -281,8 +233,13 @@ class Device:
     # ── 高层 TikTok 操作 ──
 
     def open_tiktok(self):
-        self.open_url("snssdk1233://")
+        """URL scheme 打开 TikTok。优先 tiktok://（V2.0 实战程序验证过），
+        被拒绝时再试 snssdk1233://。返回最后一次调用的响应。"""
+        r = self.open_url("tiktok://")
+        if r is not None and not self._ok(r):
+            r = self.open_url("snssdk1233://")
         time.sleep(random.uniform(4, 6))
+        return r
 
     def swipe_next_video(self):
         """在推荐页上滑切换下一个视频"""
@@ -349,55 +306,62 @@ class Device:
 
 
 class DeviceManager:
-    """管理单个 iMouse 节点（一台电脑）的设备"""
+    """管理单个 iMouse 节点（一台电脑）的设备。
+    version='auto' 时自动探测该节点跑的是 Pro 还是 XP，选对应接口。"""
 
-    def __init__(self, host="127.0.0.1", port=9912, node_name="本机"):
+    def __init__(self, host="127.0.0.1", port=None, node_name="本机", version="auto"):
         self.host = host
-        self.port = port
         self.node_name = node_name
-        self.api_url = f"http://{host}:{port}/api"
-        self._session = requests.Session()
+        self.requested_version = (version or "auto").lower()
+        self.requested_port = port
+        self.backend: Optional[ImouseBackend] = None
+        self._ensure_backend()
+
+    # ── 版本探测 / 后端 ──
+
+    def _ensure_backend(self, force=False):
+        """探测并创建后端。探测失败时 backend 为 None（节点离线）。"""
+        if self.backend is not None and not force:
+            return self.backend
+        # port=0 / None 视为"用该版本默认端口"；老配置里写死的 9912 若版本是 auto 也忽略
+        port = self.requested_port or None
+        if self.requested_version == "auto" and port in (9911, 9912):
+            port = None
+        self.backend = make_backend(self.host, port, self.requested_version)
+        if self.backend:
+            logger.info(f"[{self.node_name}] iMouse {version_label(self.backend.version)} "
+                        f"@ {self.backend.host}:{self.backend.port}")
+        else:
+            logger.warning(f"[{self.node_name}] 未探测到 iMouse（Pro:9912 / XP:9911 均不通）")
+        return self.backend
+
+    @property
+    def version(self):
+        return self.backend.version if self.backend else None
+
+    @property
+    def version_label(self):
+        return version_label(self.version)
+
+    @property
+    def port(self):
+        return self.backend.port if self.backend else (self.requested_port or 0)
+
+    @property
+    def api_url(self):
+        return self.backend.api_url if self.backend else f"http://{self.host}:{self.port}/api"
 
     def probe(self, timeout=6):
         """探测节点连通性，返回 (online: bool, device_count: int)。
-        区分'离线'(连不上)和'在线但无设备'。"""
+        区分'离线'(连不上)和'在线但无设备'。会顺便刷新版本探测。"""
+        self._ensure_backend(force=True)
+        if not self.backend:
+            return False, 0
         try:
-            r = self._session.post(
-                self.api_url,
-                json={"fun": "get_device_list", "data": {}, "msgid": 1},
-                timeout=timeout,
-            )
-            resp = r.json()
-            data = resp.get("data")
-            count = len(data) if isinstance(data, (dict, list)) else 0
-            return True, count
+            devs = self.backend.device_list()
+            return True, len(devs)
         except Exception:
             return False, 0
-
-    def _get_group_map(self):
-        """获取 gid -> 组名 映射"""
-        gmap = {}
-        try:
-            r = self._session.post(
-                self.api_url,
-                json={"fun": "get_group_list", "data": {}, "msgid": 9},
-                timeout=8,
-            )
-            data = r.json().get("data")
-            if isinstance(data, dict):
-                for gid, ginfo in data.items():
-                    if isinstance(ginfo, dict):
-                        gmap[str(gid)] = ginfo.get("name", "")
-                    else:
-                        gmap[str(gid)] = str(ginfo)
-            elif isinstance(data, list):
-                for ginfo in data:
-                    if isinstance(ginfo, dict):
-                        gid = str(ginfo.get("gid", ginfo.get("id", "")))
-                        gmap[gid] = ginfo.get("name", "")
-        except Exception as e:
-            logger.debug(f"获取分组列表失败（将用分辨率/型号判断机型）: {e}")
-        return gmap
 
     def _make_device(self, did, info, gmap):
         gid = str(info.get("gid", ""))
@@ -407,39 +371,26 @@ class DeviceManager:
         return Device(
             device_id=did,
             name=name,
-            api_url=self.api_url,
             info=info,
             group_name=group_name,
             node_name=self.node_name,
+            backend=self.backend,
         )
 
     def get_devices(self):
+        if not self._ensure_backend():
+            logger.error(f"[{self.node_name}] 连接 iMouse 失败：未探测到服务")
+            return []
         try:
-            gmap = self._get_group_map()
-            r = self._session.post(
-                self.api_url,
-                json={"fun": "get_device_list", "data": {}, "msgid": 1},
-                timeout=10,
-            )
-            resp = r.json()
-            if resp.get("status") != 0:
-                logger.error(f"获取设备列表失败: {resp}")
-                return []
-            data = resp.get("data", {})
-            devices = []
-            if isinstance(data, dict):
-                for did, info in data.items():
-                    if isinstance(info, dict):
-                        devices.append(self._make_device(did, info, gmap))
-            elif isinstance(data, list):
-                for info in data:
-                    did = info.get("deviceid", "")
-                    devices.append(self._make_device(did, info, gmap))
+            gmap = self.backend.group_list()
+            data = self.backend.device_list()
+            devices = [self._make_device(did, info, gmap) for did, info in data.items()]
             se_count = sum(1 for d in devices if d.model_type == "se")
-            logger.info(f"获取到 {len(devices)} 台设备 (SE机型: {se_count})")
+            logger.info(f"[{self.node_name}] {self.version_label} 获取到 {len(devices)} 台设备 "
+                        f"(SE机型: {se_count})")
             return devices
         except Exception as e:
-            logger.error(f"连接 iMouse 失败: {e}")
+            logger.error(f"[{self.node_name}] 获取设备列表失败: {e}")
             return []
 
     def get_device_by_name(self, name):

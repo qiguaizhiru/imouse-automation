@@ -46,6 +46,7 @@ NORMAL_COORDS = {
     "search_box":     (207, 38),    # 搜索输入框
     "home_tab":       (41, 830),    # 底部 首页（验证坐标）
     "discover_tab":   (125, 830),   # 底部 发现
+    "plus_button":    (207, 830),   # 底部正中 发布(+)（识图 +white/+black 优先，此为兜底）
     "inbox_tab":      (295, 830),   # 底部 收件箱
     "profile_tab":    (380, 830),   # 底部 个人页
     "back":           (27, 72),     # 左上返回

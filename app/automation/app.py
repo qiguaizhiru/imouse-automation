@@ -24,6 +24,9 @@ from .error_reporter import ErrorReporter, load_user_info, save_user_info
 from .paths import data_path
 from .updater import Updater
 from .version import VERSION
+from .workflows import GenImageWorkflow
+from .tasks.upload import (UploadTask, gather_dir, scan_folder_dispatch,
+                           files_for_device, default_media_root)
 
 SCRIPT_DIR = data_path("")  # 可写数据目录（配置/文件对话框起始目录）
 CONFIG_FILE = data_path("config.json")
@@ -32,6 +35,8 @@ NURTURE_CONFIG_FILE = data_path("nurture_config.json")
 
 class AutomationApp(QtWidgets.QMainWindow):
     _signal_log = pyqtSignal(str)
+    _signal_up_progress = pyqtSignal(int, int, int)   # done, ok, fail
+    _signal_up_done = pyqtSignal()
     _signal_refresh_progress = pyqtSignal()
     _signal_refresh_jobs = pyqtSignal()
     _signal_refresh_nodes = pyqtSignal()
@@ -60,6 +65,7 @@ class AutomationApp(QtWidgets.QMainWindow):
         self._scheduler = None      # PublishScheduler
         self._node_manager = None   # MultiNodeManager
         self._node_status = {}      # 节点名 -> {online, device_count, host, port}
+        self._workflows = {}        # 工作流key -> 运行中的实例
 
         # 信号绑定
         self._signal_log.connect(self._append_log)
@@ -90,6 +96,30 @@ class AutomationApp(QtWidgets.QMainWindow):
             row["button"].clicked.connect(
                 lambda checked, k=key: self._toggle_workflow(k, checked))
         self._ui.button_wf_save_cfg.clicked.connect(self._save_workflow_cfg)
+
+        # 素材上传 Tab（套用 V2.0 上传选项卡逻辑）
+        self._upload_task = None
+        self._ui.button_up_add_files.clicked.connect(self._up_add_files)
+        self._ui.button_up_add_dir.clicked.connect(self._up_add_dir)
+        self._ui.button_up_remove.clicked.connect(self._up_remove_selected)
+        self._ui.button_up_clear.clicked.connect(self._up_clear_files)
+        self._ui.button_up_pick_root.clicked.connect(self._up_pick_root)
+        self._ui.button_up_clear_root.clicked.connect(lambda: self._ui.lineEdit_up_root.clear())
+        self._ui.button_up_preview.clicked.connect(self._up_preview)
+        self._ui.button_up_start.clicked.connect(lambda: self._up_start(all_devices=False))
+        self._ui.button_up_all.clicked.connect(lambda: self._up_start(all_devices=True))
+        self._ui.button_up_stop.clicked.connect(self._up_stop)
+        self._ui.lineEdit_up_root.textChanged.connect(self._up_mode_changed)
+        self._ui.radio_up_album.toggled.connect(self._up_mode_changed)
+        self._ui.list_up_files.model().rowsInserted.connect(self._up_refresh_count)
+        self._ui.list_up_files.model().rowsRemoved.connect(self._up_refresh_count)
+        _root = default_media_root()
+        if os.path.isdir(_root):
+            self._ui.lineEdit_up_root.setText(_root)
+        self._up_mode_changed()
+        self._signal_up_progress.connect(self._up_on_progress)
+        self._signal_up_done.connect(self._up_on_done)
+
         self._ui.button_start_scheduler.clicked.connect(self._start_scheduler)
         self._ui.button_stop_scheduler.clicked.connect(self._stop_scheduler)
         self._ui.button_del_job.clicked.connect(self._delete_selected_job)
@@ -129,6 +159,7 @@ class AutomationApp(QtWidgets.QMainWindow):
 
         # 加载已有配置
         self._load_saved_config()
+        self._load_workflow_cfg()
         self._update_username_display()
         self._refresh_nodes_table()
         self._init_scheduler()
@@ -213,7 +244,14 @@ class AutomationApp(QtWidgets.QMainWindow):
                 parts.append(f"{len(nodes_seen)}个节点")
             if se_count:
                 parts.append(f"SE机型{se_count}台")
-            self._ui.label_status.setText(f"已连接 ({len(self._devices)}台)")
+            # 识别到的 iMouse 版本（多节点时可能混用，全部列出）
+            from .imouse_backend import version_label
+            vers = sorted({d.imouse_version for d in self._devices if getattr(d, "backend", None)})
+            ver_txt = "/".join(version_label(v) for v in vers) if vers else ""
+            if ver_txt:
+                parts.append(f"iMouse {ver_txt}")
+            self._ui.label_status.setText(
+                f"已连接 ({len(self._devices)}台{(' · ' + ver_txt) if ver_txt else ''})")
             self._ui.label_status.setStyleSheet(
                 "color: #4CAF50; font-weight: bold; padding: 4px;")
             self._log("找到 " + "，".join(parts))
@@ -221,7 +259,7 @@ class AutomationApp(QtWidgets.QMainWindow):
             self._ui.label_status.setText("未连接")
             self._ui.label_status.setStyleSheet(
                 "color: #F44336; font-weight: bold; padding: 4px;")
-            self._log("未找到设备，请确认 iMouse Pro 已启动")
+            self._log("未找到设备，请确认 iMouse（专业版或XP版）已启动并连接手机")
 
         # 顺便刷新各节点的连接状态（多电脑时能看到每台在线情况）
         self._refresh_node_status()
@@ -642,6 +680,11 @@ class AutomationApp(QtWidgets.QMainWindow):
 
     # ── 工作流（当前仅UI，功能后续接入）──
 
+    # 已实现的工作流：key -> 工作流类
+    _WORKFLOW_CLASSES = {
+        "gen_image": GenImageWorkflow,
+    }
+
     def _toggle_workflow(self, key, checked):
         row = self._ui.workflow_rows.get(key)
         if not row:
@@ -649,21 +692,66 @@ class AutomationApp(QtWidgets.QMainWindow):
         name = row["name"]
         btn = row["button"]
         status = row["status"]
+
         if checked:
+            wf_cls = self._WORKFLOW_CLASSES.get(key)
+            if wf_cls is None:
+                # 未实现的工作流：仅切换显示
+                btn.setText("停止")
+                status.setText("运行中")
+                status.setStyleSheet("color: #4CAF50; font-weight: bold; border: none;")
+                self._log(f"[工作流] {name}：功能开发中，暂未实际运行")
+                return
+            # 启动真实工作流
+            wf = wf_cls(device_manager=self._get_dm(),
+                        log_callback=self._log, error_reporter=self._reporter)
+            self._workflows[key] = wf
+            wf.start()
             btn.setText("停止")
             status.setText("运行中")
             status.setStyleSheet("color: #4CAF50; font-weight: bold; border: none;")
-            self._log(f"[工作流] 启动: {name}（功能开发中，暂未实际运行）")
+            self._log(f"[工作流] 已启动: {name}")
         else:
+            wf = self._workflows.pop(key, None)
+            if wf:
+                wf.stop()
             btn.setText("启动")
             status.setText("未运行")
             status.setStyleSheet("color: #9E9E9E; font-weight: bold; border: none;")
-            self._log(f"[工作流] 停止: {name}")
+            self._log(f"[工作流] 已停止: {name}")
+
+    def _load_workflow_cfg(self):
+        """启动时把本机 workflow_config.json 里的飞书凭据回填到界面"""
+        from .workflows.gen_image import load_workflow_config
+        ui = self._ui
+        c = load_workflow_config().get("gen_image", {})
+        ui.lineEdit_wf_app_id.setText(c.get("app_id", ""))
+        ui.lineEdit_wf_app_secret.setText(c.get("app_secret", ""))
+        ui.lineEdit_wf_token.setText(c.get("app_token", ""))
+        ui.lineEdit_wf_table_id.setText(c.get("table_id", ""))
 
     def _save_workflow_cfg(self):
-        token = self._ui.lineEdit_wf_token.text().strip()
-        self._log(f"[工作流] 飞书表配置已记录（功能开发中）: {token[:40]}")
-        QMessageBox.information(self, "已保存", "飞书表配置已记录（工作流功能开发中）")
+        from .workflows.gen_image import save_workflow_config, parse_bitable_link
+        ui = self._ui
+        app_id = ui.lineEdit_wf_app_id.text().strip()
+        app_secret = ui.lineEdit_wf_app_secret.text().strip()
+        token, tbl = parse_bitable_link(ui.lineEdit_wf_token.text())
+        table_id = ui.lineEdit_wf_table_id.text().strip() or tbl
+        if tbl and not ui.lineEdit_wf_table_id.text().strip():
+            ui.lineEdit_wf_table_id.setText(tbl)
+        if token != ui.lineEdit_wf_token.text().strip():
+            ui.lineEdit_wf_token.setText(token)      # 链接 → 只留 app_token
+        missing = [n for n, v in (("App ID", app_id), ("App Secret", app_secret),
+                                  ("表格 Token", token), ("table_id", table_id)) if not v]
+        path = save_workflow_config("gen_image", {
+            "app_id": app_id, "app_secret": app_secret,
+            "app_token": token, "table_id": table_id})
+        self._log(f"[工作流] 飞书表配置已保存到本机: {path}")
+        if missing:
+            QMessageBox.warning(self, "已保存（不完整）",
+                                f"已保存，但还缺: {', '.join(missing)}\n生图工作流需要四项都填齐才能启动。")
+        else:
+            QMessageBox.information(self, "已保存", "飞书表配置已保存（只存在本机，不会随程序包/更新分发）")
 
     # ── 直接选素材文件/文件夹生成任务 ──
 
@@ -933,6 +1021,172 @@ class AutomationApp(QtWidgets.QMainWindow):
                 {"status": "downloaded", "ok": ok, "message": m}))
 
     # ═══════════════════════════════════════════════
+    # 素材上传（套用 V2.0 实战程序：文件夹模式优先，逐台逐文件上传）
+    # ═══════════════════════════════════════════════
+
+    def _up_mode_changed(self, *_):
+        ui = self._ui
+        folder_mode = bool(ui.lineEdit_up_root.text().strip())
+        # 填了素材文件夹 → 文件夹模式优先，统一文件列表灰掉提示
+        ui.group_up_files.setTitle("统一文件上传 (所有设备相同文件)"
+                                   + ("  —  已填素材文件夹，此列表不生效" if folder_mode else ""))
+        ui.group_up_files.setEnabled(not folder_mode)
+        ui.check_up_rm_empty.setEnabled(folder_mode)
+        ui.lineEdit_up_album.setPlaceholderText(
+            "留空=默认相册(Recents)" if ui.radio_up_album.isChecked() else "留空=手机根目录，如 /Download")
+
+    def _up_refresh_count(self, *_):
+        self._ui.label_up_count.setText(f"已选: {self._ui.list_up_files.count()} 个文件")
+
+    def _up_add_files(self):
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, "选择要上传的文件", "",
+            "媒体文件 (*.jpg *.jpeg *.png *.heic *.webp *.gif *.mp4 *.mov *.m4v);;所有文件 (*)")
+        for p in paths:
+            self._ui.list_up_files.addItem(os.path.abspath(p))
+        self._up_refresh_count()
+
+    def _up_add_dir(self):
+        d = QFileDialog.getExistingDirectory(self, "选择文件夹（会收集里面的图片/视频）", "")
+        if not d:
+            return
+        files = gather_dir(d)
+        for p in files:
+            self._ui.list_up_files.addItem(p)
+        self._up_refresh_count()
+        self._log(f"从文件夹添加了 {len(files)} 个文件")
+
+    def _up_remove_selected(self):
+        lw = self._ui.list_up_files
+        for it in lw.selectedItems():
+            lw.takeItem(lw.row(it))
+        self._up_refresh_count()
+
+    def _up_clear_files(self):
+        self._ui.list_up_files.clear()
+        self._up_refresh_count()
+
+    def _up_pick_root(self):
+        cur = self._ui.lineEdit_up_root.text().strip() or default_media_root()
+        d = QFileDialog.getExistingDirectory(self, "选择素材文件夹（子文件夹名=设备自定义名）",
+                                             cur if os.path.isdir(cur) else "")
+        if d:
+            self._ui.lineEdit_up_root.setText(os.path.abspath(d))
+            subs = [x for x in os.listdir(d) if os.path.isdir(os.path.join(d, x))]
+            if subs:
+                self._log(f"已选择素材文件夹，发现 {len(subs)} 个子文件夹: "
+                          + ", ".join(subs[:10]) + ("..." if len(subs) > 10 else ""))
+            else:
+                self._log("该文件夹下没有子文件夹")
+            self._up_preview()
+
+    def _up_preview(self):
+        root = self._ui.lineEdit_up_root.text().strip()
+        box = self._ui.text_up_preview
+        if not root or not os.path.isdir(root):
+            box.setPlainText("素材文件夹不存在（没填就是统一文件上传模式）")
+            return
+        groups = scan_folder_dispatch(root)
+        if not groups:
+            box.setPlainText("没找到含图片/视频的子文件夹。目录结构应是：\n"
+                             "  素材文件夹/<设备自定义名>/xxx.mp4\n  素材文件夹/1/yyy.jpg")
+            return
+        devs = self._get_checked_devices() or self._devices
+        lines, matched_files, claimed = [], 0, set()
+        for di, dev in enumerate(devs, 1):
+            folder, files = files_for_device(root, dev)
+            if not files and str(di) in groups:
+                folder, files = str(di), groups[str(di)]
+            if files:
+                claimed.add(folder)
+                matched_files += len(files)
+                lines.append(f"  {dev.name:<18} ←  [{folder}]  {len(files)} 个")
+            else:
+                lines.append(f"  {dev.name:<18} ←  ✗ 没有子文件夹「{dev.name}」，将跳过")
+        for folder, files in groups.items():
+            if folder not in claimed:
+                lines.append(f"  (无设备)           ←  [{folder}]  {len(files)} 个  ✗ 没有对应设备")
+        head = (f"共 {len(groups)} 个子文件夹，{len(devs)} 台设备，可上传 {matched_files} 个文件\n"
+                f"（子文件夹名 = 设备自定义名；也可用设备ID或序号 1,2,3…，序号按左侧列表顺序）\n")
+        box.setPlainText(head + "\n".join(lines))
+
+    def _up_start(self, all_devices=False):
+        ui = self._ui
+        if self._upload_task and self._upload_task.running:
+            QMessageBox.warning(self, "提示", "上传正在进行中")
+            return
+        devices = list(self._devices) if all_devices else self._get_checked_devices()
+        if not devices:
+            QMessageBox.warning(self, "提示",
+                                "没有已连接的设备" if all_devices else "请先在左侧勾选要上传的设备")
+            return
+
+        target = "album" if ui.radio_up_album.isChecked() else "file"
+        target_path = ui.lineEdit_up_album.text().strip()
+        root = ui.lineEdit_up_root.text().strip()
+        common = dict(target=target, target_path=target_path,
+                      workers=ui.spin_up_workers.value(),
+                      delete_after=ui.check_up_delete.isChecked(),
+                      outtime_ms=ui.spin_up_timeout.value() * 1000)
+
+        if root:
+            if not os.path.isdir(root):
+                QMessageBox.warning(self, "提示", f"素材文件夹不存在：{root}")
+                return
+            runner = lambda t: t.run_folder(devices, root,
+                                             remove_empty_dir=ui.check_up_rm_empty.isChecked(),
+                                             **common)
+            desc = f"文件夹模式: 按自定义名匹配 {root} → {len(devices)} 台设备"
+        else:
+            files = [ui.list_up_files.item(i).text() for i in range(ui.list_up_files.count())]
+            if not files:
+                QMessageBox.warning(self, "提示", "请先选择要上传的文件或素材文件夹")
+                return
+            runner = lambda t: t.run_broadcast(devices, files, **common)
+            desc = f"{len(files)} 个文件 → {len(devices)} 台设备"
+
+        if common["delete_after"]:
+            ret = QMessageBox.question(
+                self, "确认删除",
+                "已勾选「上传成功后删除电脑上的原文件」。\n删除不可恢复，只删上传成功的文件。\n是否继续？",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No)
+            if ret != QMessageBox.StandardButton.Yes:
+                return
+
+        self._upload_task = UploadTask(
+            log_cb=lambda m: self._signal_log.emit(f"[上传] {m}"),
+            progress_cb=lambda d, o, f: self._signal_up_progress.emit(d, o, f))
+        ui.button_up_start.setEnabled(False)
+        ui.button_up_all.setEnabled(False)
+        ui.button_up_stop.setEnabled(True)
+        ui.label_up_progress.setText("准备中…")
+        self._log(("一键上传" if all_devices else "上传") + f"：{desc}")
+
+        def _work():
+            try:
+                runner(self._upload_task)
+            except Exception as e:
+                self._signal_log.emit(f"[上传] 异常: {e}")
+            finally:
+                self._signal_up_done.emit()
+
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _up_stop(self):
+        if self._upload_task:
+            self._upload_task.stop()
+            self._log("正在停止上传（当前文件传完即停）…")
+
+    def _up_on_progress(self, done, ok, fail):
+        self._ui.label_up_progress.setText(f"已处理 {done} · 成功 {ok} · 失败 {fail}")
+
+    def _up_on_done(self):
+        self._ui.button_up_start.setEnabled(True)
+        self._ui.button_up_all.setEnabled(True)
+        self._ui.button_up_stop.setEnabled(False)
+
+    # ═══════════════════════════════════════════════
     # 节点管理（多台电脑）
     # ═══════════════════════════════════════════════
 
@@ -942,11 +1196,28 @@ class AutomationApp(QtWidgets.QMainWindow):
         nt.setRowCount(len(nodes))
         for i, node in enumerate(nodes):
             name = node.get("name", "")
+            st = self._node_status.get(name)
             nt.setItem(i, 0, QtWidgets.QTableWidgetItem(name))
             nt.setItem(i, 1, QtWidgets.QTableWidgetItem(node.get("host", "")))
-            nt.setItem(i, 2, QtWidgets.QTableWidgetItem(str(node.get("port", 9912))))
+            # 端口：配置里是 0 时显示探测到的实际端口
+            cfg_port = node.get("port") or 0
+            real_port = (st or {}).get("port") or cfg_port
+            port_txt = str(real_port) if real_port else "自动"
+            nt.setItem(i, 2, QtWidgets.QTableWidgetItem(port_txt))
+            # 版本列：配置指定 or 自动识别的结果
+            cfg_ver = (node.get("version") or "auto").lower()
+            if st and st.get("version"):
+                ver_txt = st.get("version_label", "")
+                if cfg_ver == "auto":
+                    ver_txt += " (自动)"
+                ver_item = QtWidgets.QTableWidgetItem(ver_txt)
+                ver_item.setForeground(QColor("#1976D2"))
+            else:
+                ver_item = QtWidgets.QTableWidgetItem(
+                    {"pro": "专业版", "xp": "XP版"}.get(cfg_ver, "自动"))
+                ver_item.setForeground(QColor("#888"))
+            nt.setItem(i, 3, ver_item)
             # 状态列：显示真实连接情况
-            st = self._node_status.get(name)
             if st is None:
                 status_item = QtWidgets.QTableWidgetItem("未刷新")
                 status_item.setForeground(QColor("#888"))
@@ -957,7 +1228,7 @@ class AutomationApp(QtWidgets.QMainWindow):
             else:
                 status_item = QtWidgets.QTableWidgetItem("离线")
                 status_item.setForeground(QColor("#F44336"))
-            nt.setItem(i, 3, status_item)
+            nt.setItem(i, 4, status_item)
 
     def _refresh_node_status(self):
         """后台查询所有节点连接状态，更新表格"""
@@ -969,10 +1240,16 @@ class AutomationApp(QtWidgets.QMainWindow):
             self._signal_refresh_nodes.emit()
         threading.Thread(target=_work, daemon=True).start()
 
+    def _ui_version(self):
+        """把下拉框的中文映射成 auto / pro / xp"""
+        return {"自动识别": "auto", "专业版": "pro", "XP版": "xp"}.get(
+            self._ui.combo_version.currentText(), "auto")
+
     def _add_node(self):
         name = self._ui.lineEdit_node_name.text().strip()
         host = self._ui.lineEdit_host.text().strip()
-        port = self._ui.spin_port.value()
+        port = self._ui.spin_port.value()          # 0 = 自动
+        version = self._ui_version()
         if not name or not host:
             QMessageBox.warning(self, "提示", "请填写节点名称和 IP 地址")
             return
@@ -982,17 +1259,20 @@ class AutomationApp(QtWidgets.QMainWindow):
             if n.get("name") == name:
                 QMessageBox.warning(self, "提示", f"节点名 '{name}' 已存在")
                 return
-            if n.get("host") == host and n.get("port") == port:
-                QMessageBox.warning(self, "提示", f"{host}:{port} 已存在")
+            if n.get("host") == host and (n.get("port") or 0) == port:
+                QMessageBox.warning(self, "提示", f"{host} 已存在")
                 return
-        nodes.append({"name": name, "host": host, "port": port})
+        nodes.append({"name": name, "host": host, "port": port, "version": version})
         save_nodes(nodes)
         if self._node_manager:
             self._node_manager.set_nodes(nodes)
         self._refresh_nodes_table()
-        self._log(f"已添加节点: {name} ({host}:{port})")
+        ver_txt = {"pro": "专业版", "xp": "XP版"}.get(version, "自动识别")
+        self._log(f"已添加节点: {name} ({host}, {ver_txt}, 端口{'自动' if not port else port})")
         self._ui.lineEdit_node_name.clear()
         self._ui.lineEdit_host.clear()
+        # 添加后立刻探测一次，把版本列填上
+        self._refresh_node_status()
 
     def _delete_node(self):
         row = self._ui.table_nodes.currentRow()
@@ -1016,21 +1296,27 @@ class AutomationApp(QtWidgets.QMainWindow):
     def _test_connection(self):
         """测试连接：填了IP=测该待添加地址；没填=刷新所有节点状态到表格"""
         host = self._ui.lineEdit_host.text().strip()
-        port = self._ui.spin_port.value()
+        port = self._ui.spin_port.value()          # 0 = 自动
+        version = self._ui_version()
 
         if host:
             # 测试输入框里这个待添加的节点
-            self._log(f"测试连接 {host}:{port} ...")
+            port_txt = str(port) if port else "自动"
+            self._log(f"测试连接 {host} (端口{port_txt}, 版本{self._ui.combo_version.currentText()}) ...")
 
             def _test_one():
                 from .nodes import MultiNodeManager
-                count = MultiNodeManager().test_node(host, port)
+                from .imouse_backend import version_label
+                count, ver = MultiNodeManager().test_node(host, port, version)
                 if count >= 0:
-                    self._signal_log.emit(f"连接成功! {host}:{port} 找到 {count} 台设备，可以添加")
+                    self._signal_log.emit(
+                        f"连接成功! {host} 识别为 iMouse {version_label(ver)}，"
+                        f"找到 {count} 台设备，可以添加")
                 else:
                     self._signal_log.emit(
-                        f"连接失败: 无法连接 {host}:{port}"
-                        f"（确认对方电脑开着 iMouse、和本机同一局域网、防火墙放行9912）")
+                        f"连接失败: 无法连接 {host}"
+                        f"（确认对方电脑开着 iMouse、和本机同一局域网、"
+                        f"防火墙放行 9912(专业版) / 9911(XP版)）")
 
             threading.Thread(target=_test_one, daemon=True).start()
         else:
@@ -1071,7 +1357,7 @@ class AutomationApp(QtWidgets.QMainWindow):
         name = self._reporter.username
         self._ui.label_user.setText(f"  {name}  ")
         self._ui.lineEdit_username.setText(name if name != "未设置" else "")
-        self.setWindowTitle(f"iMouse Pro 自动化中心 - {name}")
+        self.setWindowTitle(f"iMouse 自动化中心 - {name}")
 
     # ═══════════════════════════════════════════════
     # 错误上报

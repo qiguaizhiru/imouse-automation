@@ -57,7 +57,8 @@ class AutomationEngine:
         else:
             self._dm = DeviceManager(
                 host=self.config.get("imouse_host", "127.0.0.1"),
-                port=self.config.get("imouse_port", 9912),
+                port=self.config.get("imouse_port") or None,
+                version=self.config.get("imouse_version", "auto"),
             )
         self._pool = None  # type: Optional[ThreadPoolExecutor]
         self._runners = {}  # type: Dict[str, TaskRunner]  # device_id -> runner

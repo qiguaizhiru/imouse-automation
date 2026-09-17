@@ -18,7 +18,8 @@ from .paths import data_path
 NODES_FILE = data_path("nodes.json")
 
 DEFAULT_NODES = [
-    {"name": "本机", "host": "127.0.0.1", "port": 9912},
+    # port=0 表示按探测到的版本自动选端口；version 可填 auto / pro / xp
+    {"name": "本机", "host": "127.0.0.1", "port": 0, "version": "auto"},
 ]
 
 
@@ -57,8 +58,9 @@ class MultiNodeManager:
             name = node.get("name", node.get("host", "?"))
             self._managers[name] = DeviceManager(
                 host=node.get("host", "127.0.0.1"),
-                port=node.get("port", 9912),
+                port=node.get("port") or None,
                 node_name=name,
+                version=node.get("version", "auto"),
             )
 
     def set_nodes(self, nodes):
@@ -115,6 +117,8 @@ class MultiNodeManager:
             status[name] = {
                 "host": mgr.host, "port": mgr.port,
                 "online": online, "device_count": count,
+                "version": mgr.version,               # 'pro' / 'xp' / None
+                "version_label": mgr.version_label,   # '专业版' / 'XP版' / '未知'
             }
 
         for name, mgr in self._managers.items():
@@ -128,13 +132,18 @@ class MultiNodeManager:
         for name, mgr in self._managers.items():
             if name not in status:
                 status[name] = {"host": mgr.host, "port": mgr.port,
-                                "online": False, "device_count": 0}
+                                "online": False, "device_count": 0,
+                                "version": None, "version_label": "未知"}
         return status
 
-    def test_node(self, host, port):
-        """测试单个节点连通性，返回设备数或 -1"""
+    def test_node(self, host, port=None, version="auto"):
+        """测试单个节点连通性。返回 (设备数, 版本) —— 连不上时设备数为 -1。
+        port 传 0/None 表示自动按版本选端口。"""
         try:
-            mgr = DeviceManager(host=host, port=port, node_name="test")
-            return len(mgr.get_devices())
+            mgr = DeviceManager(host=host, port=port or None,
+                                node_name="test", version=version)
+            if not mgr.backend:
+                return -1, None
+            return len(mgr.get_devices()), mgr.version
         except Exception:
-            return -1
+            return -1, None
